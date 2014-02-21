@@ -3,12 +3,12 @@
 from os import path, makedirs
 from sys import stdout, stderr
 from multiprocessing import Process
-from multiprocessing.managers import SyncManager
+from multiprocessing.managers import SyncManager, DictProxy
 from uuid import uuid1
 from datetime import datetime
 from itertools import izip
 from time import sleep
-from Queue import PriorityQueue 
+from Queue import PriorityQueue , Empty
 from marshal import dumps, loads
 from types import FunctionType
 from threading import Thread, Lock, currentThread
@@ -125,7 +125,6 @@ class Channel(object):
       self.stream= PriorityQueue()
       self.store= {}
 
-
 class Queue(object):
 
    def __init__(self, host, port, security_key):
@@ -140,6 +139,7 @@ class Queue(object):
       self.manager.register("get", callable= self.get)
       self.manager.register("status", callable= self.status)
       self.manager.register("task_done", callable= self.task_done)
+      self.manager.register("get_channels", callable= self.get_channels, proxytype= DictProxy)
 
    def create_channel(self, **properties):
 
@@ -151,6 +151,12 @@ class Queue(object):
       self.channels[channel_id]= channel
 
       return channel_id
+
+   def get_channels(self):
+
+      channels= [channel_id for channel_id in self.channels.keys()]
+
+      return channels
 
    def put(self, job, channel_id= None):
 
@@ -171,8 +177,12 @@ class Queue(object):
       if channel_id not in self.channels:
          raise Exception("invalid channel_id [%s]" % (channel_id))
 
-      (job_priority, job_id)= self.channels[channel_id].stream.get(block)
-      job= self.channels[channel_id].store.get(job_id)
+      try:
+         (job_priority, job_id)= self.channels[channel_id].stream.get(block)
+         job= self.channels[channel_id].store.get(job_id)
+         print "RETURNING JOB", job
+      except Empty:
+         job= None
 
       return job
 
@@ -324,7 +334,7 @@ class Client(object):
       with self._lock:
  
          progress= self._progress.get(name, dict(self.status.__dict__))
-         progress.update([(status, progress.get(status) + count)])
+         progress.update([(status, progress.get(status, 0) + count)])
          self._progress.update([(name, progress)])
 
    def __show_progress(self, current_thread):
@@ -399,6 +409,7 @@ class Worker(Process):
       SyncManager.register('empty')
       SyncManager.register('qsize')
       SyncManager.register('task_done')
+      SyncManager.register('get_channels')
 
       self.impq= SyncManager(address= (host, int(port)), authkey= security_key)
       self.impq.connect()
@@ -406,30 +417,40 @@ class Worker(Process):
       self.alive= True
       self.status= Status(*self.statuses)
 
+   def process(self, channel_id):
+
+      print "processing channel", channel_id
+      try:
+
+         job= self.impq.get(channel_id)
+         if not job:
+            return
+
+         self.status.next()
+         job.promote()
+
+         print self.pid, self.status.current, job.get('id'), job.get('name')
+         stdout.flush()
+
+         method= FunctionType(loads(job.get('code')), globals(), job.get('name'))
+         result= method(job.get('args'))
+         job.update([('result', result)])
+
+         job.promote()
+
+         self.impq.task_done(job)
+         self.status.previous()
+
+      except Exception, e:
+         print str(e)
+
+
    def run(self):
 
       while self.alive:
 
-         try:
-
-            job= self.impq.get()
-            self.status.next()
-            job.promote()
-
-            print self.pid, self.status.current, job.get('id'), job.get('name')
-            stdout.flush()
-
-            method= FunctionType(loads(job.get('code')), globals(), job.get('name'))
-            result= method(job.get('args'))
-            job.update([('result', result)])
-
-            job.promote()
-
-            self.impq.task_done(job)
-            self.status.previous()
-
-         except Exception, e:
-            print str(e)
+         for channel_id in self.impq.get_channels():
+            self.process(channel_id)
 
          sleep(1)
 
@@ -455,7 +476,7 @@ class Node(object):
       while self.alive:
    
          for pid, worker in self.workers.items():
-            print pid, worker.status.current
+            print "process_id: %s, status: %s" % (pid, worker.status.current)
             stdout.flush()
             sleep(1)
 
