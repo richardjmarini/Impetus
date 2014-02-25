@@ -3,7 +3,7 @@
 from os import path, makedirs
 from sys import stdout, stderr
 from multiprocessing import Process
-from multiprocessing.managers import SyncManager, DictProxy
+from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
 from uuid import uuid1
 from datetime import datetime
 from itertools import izip
@@ -95,7 +95,8 @@ class Job(Autovivification):
 
    def promote(self):
   
-      self.status.next()
+      print "DATAAAAAAAAA", self.__dict__
+      getattr(self, 'status').next()
 
    def demote(self):
 
@@ -136,7 +137,7 @@ class Queue(object):
       self.manager= SyncManager(address= (host, int(port)), authkey= security_key)
       self.manager.register("create_channel", callable= self.create_channel)
       self.manager.register("put", callable= self.put)
-      self.manager.register("get", callable= self.get)
+      self.manager.register("get", callable= self.get, proxytype= Job)
       self.manager.register("status", callable= self.status)
       self.manager.register("task_done", callable= self.task_done)
       self.manager.register("get_channels", callable= self.get_channels, proxytype= DictProxy)
@@ -423,11 +424,13 @@ class Worker(Process):
       try:
 
          job= self.impq.get(channel_id)
-         if not job:
+         if job._getvalue() == None:
+            print "No Jobs"
             return
 
          self.status.next()
          job.promote()
+         print "JOB STATUS", job.get("status")
 
          print self.pid, self.status.current, job.get('id'), job.get('name')
          stdout.flush()
@@ -437,6 +440,7 @@ class Worker(Process):
          job.update([('result', result)])
 
          job.promote()
+         print "JOB STATUS", job
 
          self.impq.task_done(job)
          self.status.previous()
