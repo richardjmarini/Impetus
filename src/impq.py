@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from os import path, makedirs
-from sys import stdout, stderr
+from sys import stdout, stderr, exc_info
 from multiprocessing import Process
 from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
 from uuid import uuid1
@@ -13,6 +13,7 @@ from marshal import dumps, loads
 from types import FunctionType
 from threading import Thread, Lock, currentThread
 from codecs import open as utf8open
+from traceback import extract_tb
 
 class Autovivification(object):
 
@@ -41,11 +42,16 @@ class Status(object):
 
       self.current= 0
 
-   def get(self, status):
+   def get(self, status= None):
 
-      label= dict(enumerate(self._statuses)).get(status)
+      if status == None:
+         return self.current_status
 
-      return label
+      statuses= enumerate(self._statuses)
+      if status in self._statuses:
+         statuses= map(reversed, statuses)
+
+      return dict(statuses).get(status)
 
    def __iter__(self):
 
@@ -57,6 +63,10 @@ class Status(object):
 
       self.current+= 1
       return self._statuses[self.current-1]
+
+   def reset(self):
+
+      self.current= 0
 
    def previous(self):
 
@@ -73,17 +83,17 @@ class Status(object):
 
 class Job(Autovivification):
 
-   statuses= ("waiting", "running", "ready", "error")
+   statuses= ("waiting", "processing", "ready", "error")
 
    def __init__(self, *args, **kwargs):
 
-      id= kwargs.get('id')
+      id= kwargs.get("id")
       if not id:
          id= str(uuid1())
       else:
-         del kwargs['id']
+         del kwargs["id"]
 
-      created= kwargs.get('created')
+      created= kwargs.get("created")
       if not created:
          created= datetime.utcnow()
 
@@ -93,14 +103,25 @@ class Job(Autovivification):
 
       super(Job, self).__init__(**kwargs)
 
-   def promote(self):
-  
-      print "DATAAAAAAAAA", self.__dict__
-      getattr(self, 'status').next()
+   def promote(self, status= None):
 
-   def demote(self):
+      if status:
+         while self.status.current != self.status.get(status):
+            self.status.next()
+      else:
+         self.status.next()
 
-      self.status.previous()
+   def reset(self):
+
+      self.status.reset()
+
+   def demote(self, status= None):
+
+      if status:
+         while self.status.current != self.status.get(status):
+            self.status.previous()
+      else:
+         self.status.previous()
 
    def update(self, attributes):
 
@@ -145,7 +166,7 @@ class Queue(object):
    def create_channel(self, **properties):
 
       channel= Channel(**properties)
-      channel_id= properties.get('channel_id')
+      channel_id= properties.get("channel_id")
       if not channel_id:
          channel_id= uuid1()
 
@@ -168,8 +189,8 @@ class Queue(object):
          print >> stderr, "warning: creating non-existent channel [%s]" % (channel_id)
          self.create_channel(channel_id= channel_id)
  
-      self.channels[channel_id].store.update([(job.get('id'), job)])
-      self.channels[channel_id].stream.put([(job.get('priority'), job.get('id'))])
+      self.channels[channel_id].store.update([(job.get("id"), job)])
+      self.channels[channel_id].stream.put([(job.get("priority"), job.get("id"))])
 
       return channel_id
 
@@ -179,9 +200,10 @@ class Queue(object):
          raise Exception("invalid channel_id [%s]" % (channel_id))
 
       try:
-         (job_priority, job_id)= self.channels[channel_id].stream.get(block)
+         
+         (job_priority, job_id)= self.channels[channel_id].stream.get(block).pop()
          job= self.channels[channel_id].store.get(job_id)
-         print "RETURNING JOB", job
+         print "job picked up: ", job.get("id")
       except Empty:
          job= None
 
@@ -200,7 +222,7 @@ class Queue(object):
       if channel_id not in self.channels:
          raise Exception("invalid channel_id [%s]" % (channel_id))
 
-      self.channels[channel_id].store.update([(job.get('id'), job)])
+      self.channels[channel_id].store.update([(job.get("id"), job)])
       self.channels[channel_id].stream.task_done()
 
    def run(self):
@@ -213,16 +235,16 @@ class Queue(object):
 _thread_order= 0
 class Client(object):
 
-   def __init__(self, host, port, security_key, id= None, task_dir= 'tasks'):
+   def __init__(self, host, port, security_key, id= None, task_dir= "tasks"):
 
       self.id= id if id else str(uuid1())
       self.task_dir= path.join(task_dir, self.id)
       self.status= Status("forked", "processed")
 
       self.impq= SyncManager(address= (host, port), authkey= security_key)
-      self.impq.register('create_channel')
-      self.impq.register('put')
-      self.impq.register('status')
+      self.impq.register("create_channel")
+      self.impq.register("put")
+      self.impq.register("status")
       self.impq.connect()
       self.impq.create_channel(channel_id= self.id)
 
@@ -321,14 +343,14 @@ class Client(object):
       )
 
       if priority:
-         setattr(job, 'priority', priority)
+         setattr(job, "priority", priority)
 
       self.impq.put(job, channel_id= self.id)
       self.jobs.append(job.get("id"))
 
       self._thread_progress(current_thread.name, self.status.forked, 1)
 
-      return job.get('id')
+      return job.get("id")
 
    def _thread_progress(self, name, status, count):
 
@@ -368,8 +390,8 @@ class Client(object):
 
       
       thread= Thread(target= method, name= name, args= (self, ))
-      self.errors[name]= utf8open(path.join(self.task_dir, '.'.join((name, 'err'))), 'ab+')
-      self.ready[name]=  utf8open(path.join(self.task_dir, '.'.join((name, 'ok'))), 'ab+')
+      self.errors[name]= utf8open(path.join(self.task_dir, '.'.join((name, "err"))), 'ab+')
+      self.ready[name]=  utf8open(path.join(self.task_dir, '.'.join((name, "ok"))), 'ab+')
 
       return thread
  
@@ -377,8 +399,8 @@ class Client(object):
  
       for i in range(len(threads)):
  
-        setattr(threads[i], 'previous_thread', threads[i-1] if i > 0 else None)
-        setattr(threads[i], 'next_thread', threads[i+1] if i < len(threads)-1 else None)
+        setattr(threads[i], "previous_thread", threads[i-1] if i > 0 else None)
+        setattr(threads[i], "next_thread", threads[i+1] if i < len(threads)-1 else None)
   
       return threads[0]
 
@@ -389,11 +411,11 @@ class Client(object):
 
    def run(self):
 
-      self.threads= [self._create_thread(name, method) for (name, method) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == '_process', self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
+      self.threads= [self._create_thread(name, method) for (name, method) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == "_process", self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
       self._current_thread= self._link_threads(self.threads)
       self._start_threads(self.threads)
 
-      [method(self, self.ready, self.errors, self._progress) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == '_shutdown', self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
+      [method(self, self.ready, self.errors, self._progress) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == "_shutdown", self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
 
 
 class Worker(Process):
@@ -404,13 +426,13 @@ class Worker(Process):
 
       super(Worker, self).__init__()
 
-      SyncManager.register('get')
-      SyncManager.register('peek')
-      SyncManager.register('put')
-      SyncManager.register('empty')
-      SyncManager.register('qsize')
-      SyncManager.register('task_done')
-      SyncManager.register('get_channels')
+      SyncManager.register("get")
+      SyncManager.register("peek")
+      SyncManager.register("put")
+      SyncManager.register("empty")
+      SyncManager.register("qsize")
+      SyncManager.register("task_done")
+      SyncManager.register("get_channels")
 
       self.impq= SyncManager(address= (host, int(port)), authkey= security_key)
       self.impq.connect()
@@ -422,31 +444,38 @@ class Worker(Process):
 
       print "processing channel", channel_id
       try:
-
          job= self.impq.get(channel_id)
          if job._getvalue() == None:
             print "No Jobs"
             return
+      except Exception, e:
+         print >> stderr, "error:", str(e)
 
+      try:
          self.status.next()
          job.promote()
-         print "JOB STATUS", job.get("status")
 
-         print self.pid, self.status.current, job.get('id'), job.get('name')
+         print "processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status")
          stdout.flush()
 
-         method= FunctionType(loads(job.get('code')), globals(), job.get('name'))
-         result= method(job.get('args'))
-         job.update([('result', result)])
-
+         method= FunctionType(loads(job.get("code")), globals(), job.get("name"))
+         result= method(job.get("args"))
+         job.update([("result", result)])
          job.promote()
-         print "JOB STATUS", job
 
-         self.impq.task_done(job)
+         #self.impq.task_done(job)
          self.status.previous()
 
+         print "completed job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status")
+
       except Exception, e:
-         print str(e)
+
+         (filename, linenumber, functionname, statement)= extract_tb(exc_info()[2])[-1]
+         result= {"error": str(e), "name": functionname, "linenumber": linenumber, "statement": statement}
+         job.update([("result", result)])
+         job.promote("error")
+
+         print >> stderr, "error processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status"), str(e)
 
 
    def run(self):
