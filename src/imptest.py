@@ -31,6 +31,10 @@ class MyBot(Client):
 
       print "shutting down"
 
+   @Client.shutdown
+   def stop2(self, progresS):
+       print "all done now"
+
 
 if __name__ == '__main__':
 

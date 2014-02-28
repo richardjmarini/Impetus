@@ -307,7 +307,7 @@ class Client(object):
    
       def _shutdown(self):
 
-         shutdown(selfs, self.progress)
+         shutdown(self, self._progress)
 
       global _thread_order
       _shutdown.order= _thread_order
@@ -455,7 +455,8 @@ class Client(object):
       self._current_thread= self._link_threads(self.threads)
       self._start_threads(self.threads)
 
-      [method(self) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == "_shutdown", self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
+      [method(self) for (name, method) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == "_shutdown", self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
+
 
 
 class Worker(Process):
