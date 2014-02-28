@@ -53,6 +53,10 @@ class Status(object):
 
       return dict(statuses).get(status)
 
+   def flags(self):
+
+      return self._statuses
+
    def __iter__(self):
 
       return self
@@ -99,7 +103,7 @@ class Job(Autovivification):
 
       status= Status(*self.statuses)
 
-      kwargs.update([("id", id), ("created", created), ("status", status), ("data", args)])
+      kwargs.update([("id", id), ("created", created), ("status", status), ("args", args)])
 
       super(Job, self).__init__(**kwargs)
 
@@ -157,9 +161,11 @@ class Queue(object):
 
       self.manager= SyncManager(address= (host, int(port)), authkey= security_key)
       self.manager.register("create_channel", callable= self.create_channel)
+      self.manager.register("delete_channel", callable= self.delete_channel)
       self.manager.register("put", callable= self.put)
+      self.manager.register("kill", callable= self.kill)
       self.manager.register("get", callable= self.get, proxytype= Job)
-      self.manager.register("status", callable= self.status)
+      self.manager.register("jobs", callable= self.jobs, proxytype= DictProxy)
       self.manager.register("task_done", callable= self.task_done)
       self.manager.register("get_channels", callable= self.get_channels, proxytype= DictProxy)
 
@@ -174,11 +180,16 @@ class Queue(object):
 
       return channel_id
 
+   def delete_channel(self, channel_id):  
+
+      del self.channels[channel_id]
+
    def get_channels(self):
 
       channels= [channel_id for channel_id in self.channels.keys()]
 
       return channels
+
 
    def put(self, job, channel_id= None):
 
@@ -209,13 +220,18 @@ class Queue(object):
 
       return job
 
-   def status(self, channel_id):
+   def kill(self, job_id, channel_id):
+
+      self.channels[channel_id].store.pop(job_id)
+
+   def jobs(self, channel_id):
 
       if channel_id not in self.channels:
          raise Exception("invalid channel_id [%s]" % (channel_id))
 
       store= self.channels[channel_id].store
-      return len(store), store
+
+      return store
 
    def task_done(self, job, channel_id):
 
@@ -243,8 +259,10 @@ class Client(object):
 
       self.impq= SyncManager(address= (host, port), authkey= security_key)
       self.impq.register("create_channel")
+      self.impq.register("delete_channel")
       self.impq.register("put")
-      self.impq.register("status")
+      self.impq.register("kill")
+      self.impq.register("jobs")
       self.impq.connect()
       self.impq.create_channel(channel_id= self.id)
 
@@ -262,6 +280,10 @@ class Client(object):
          makedirs(self.task_dir)
       except:
          pass
+
+   def __del__(self):
+
+      self.impq.delete_channel(channel_id= self.id)
 
    @staticmethod
    def node(method):
@@ -285,7 +307,7 @@ class Client(object):
    
       def _shutdown(self):
 
-         shutdown(self)
+         shutdown(selfs, self.progress)
 
       global _thread_order
       _shutdown.order= _thread_order
@@ -297,6 +319,8 @@ class Client(object):
       def _process(self):
 
          current_thread= currentThread()
+         if current_thread.name == 'MainThread':
+            return
          previous_thread= current_thread.previous_thread
          status= Status(*Job.statuses)
 
@@ -304,20 +328,30 @@ class Client(object):
 
             self._thread_regulator(current_thread, previous_thread)
 
-            print "%s %s" % (datetime.utcnow(), current_thread.name)
+            jobs= self.impq.jobs(self.id)
+            ready= []
+            errors= []
+            for job_id, job in jobs.items():
+               if job.status.current == status.get("ready"):
+                  ready.append(job)
+               elif job.status.current == status.get("error"):
+                  errors.append(job)
+               else:
+                  continue
 
-            (num_jobs, jobs)= self.impq.status(self.id)
-            ready= filter(lambda job_id: self.jobs[job_id].status.current == status.get("ready"), self.jobs)
-            error= filter(lambda job_id: self.jobs[job_id].status.current == status.get("error"), self.jobs)
-    
+               print "killing", job_id
+               self.kill(job_id)
+
             if len(ready) or len(errors):
                process(self, ready, errors)
 
-            self._thread_progress(current_thread.name, self.status.processed, len(ready) + len(errors))
+            self._thread_progress(current_thread.name, "processed", len(ready) + len(errors))
             self._show_progress(current_thread)
 
-            if num_jobs and previous_thread != None and previous_thread.is_alive() == False:
+            print len(jobs), previous_thread.is_alive()
+            if len(jobs) == 0 and previous_thread != None and previous_thread.is_alive() == False:
                print "%s %s completed" % (datetime.utcnow(), current_thread.name)
+               stdout.flush()
                self.alive= False
 
             sleep(0.1)
@@ -331,16 +365,17 @@ class Client(object):
    def fork(self, method, args, callback= None, priority= None):
 
       current_thread= currentThread()
-      
+      print "FFFFFFFFFFFFFFFORK", args
       job= Job(
          client= self.id,
          name= method.func_name,
          code= dumps(method.func_code),
          args= args,
-         callback= callback.func_name if callback else None,
+         callback= callback.func_name if callback else current_thread.next_thread.name,
          result= None,
          transport= None
       )
+      print job
 
       if priority:
          setattr(job, "priority", priority)
@@ -348,42 +383,49 @@ class Client(object):
       self.impq.put(job, channel_id= self.id)
       self.jobs.append(job.get("id"))
 
-      self._thread_progress(current_thread.name, self.status.forked, 1)
+      self._thread_progress(current_thread.name, "forked", 1)
 
       return job.get("id")
+
+   def kill(self, job_id):
+
+      self.impq.kill(job_id, channel_id= self.id)
+
 
    def _thread_progress(self, name, status, count):
 
       with self._lock:
  
-         progress= self._progress.get(name, dict(self.status.__dict__))
+         progress= self._progress.get(name, dict([(s, 0) for s in self.status.flags()]))
          progress.update([(status, progress.get(status, 0) + count)])
          self._progress.update([(name, progress)])
 
-   def __show_progress(self, current_thread):
+   def _show_progress(self, current_thread):
  
       msg= []
       with self._lock:
          for thread in self.threads:
-            progress= self._progress.get(thread.name, dict(self.status.__dict__))
-            msg.append("%s %s/%s -> " % (thread.name, counter.get(self.status.forked), counter.get(self.status.processed)))
+            progress= self._progress.get(thread.name, dict([(s, 0) for s in self.status.flags()]))
+            msg.append("%s %s/%s -> " % (thread.name, progress.get("forked"), progress.get("processed")))
 
-      print "%s %s via %s" % (datetime.utcnow(), ''.join(msg)[:-4], current.thread_name)
+      print "thread: %s %s" % (current_thread.name, ''.join(msg)[:-4])
          
    def _thread_regulator(self, current_thread, previous_thread):
 
       stall_time= 1
       while self._current_thread == current_thread:
+         #print "stalling:", current_thread.name, stall_time
          sleep(stall_time)
          stall_time+= 1
          if stall_time >= 10:
             break
 
-         if current_thread.name == self.threads[-1].name and previous_thread != None and previous_thread.is_Alive() == False:
-            while self._lock:
+         if current_thread.name == self.threads[-1].name and previous_thread != None and previous_thread.is_alive() == False:
+            with self._lock:
                self._current_thread= self.threads[0]
 
-      while self._lock:
+      with self._lock:
+         #print "setting current thread", current_thread.name
          self._current_thread= current_thread
 
    def _create_thread(self, name, method):
@@ -415,7 +457,7 @@ class Client(object):
       self._current_thread= self._link_threads(self.threads)
       self._start_threads(self.threads)
 
-      [method(self, self.ready, self.errors, self._progress) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == "_shutdown", self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
+      [method(self) in sorted(filter(lambda (name, method): type(method) == FunctionType and method.__name__ == "_shutdown", self.__class__.__dict__.items()), key= lambda (name, method): method.order)]
 
 
 class Worker(Process):
@@ -429,6 +471,7 @@ class Worker(Process):
       SyncManager.register("get")
       SyncManager.register("peek")
       SyncManager.register("put")
+      SyncManager.register("del")
       SyncManager.register("empty")
       SyncManager.register("qsize")
       SyncManager.register("task_done")
@@ -456,6 +499,7 @@ class Worker(Process):
          job.promote()
 
          print "processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status")
+         print job
          stdout.flush()
 
          method= FunctionType(loads(job.get("code")), globals(), job.get("name"))
