@@ -13,26 +13,18 @@ class MyBot(Client):
 
    @Client.node
    def pow(i):
-      print "GOT IIIIIII", i
       return i * i
 
    @Client.startup
    def start(self):
 
-      print "forking up"
       for i in range(0, 10):
-         print "forking pow with", i
          self.fork(self.pow, args= i)
-      print "fork complete"
 
    @Client.process
    def stage1(self, ready, errors):
-      print "processing", len(ready), len(errors)
-      for job in ready:
-         print job
 
-      for job in errors:
-         print job
+      print sum([job.get('result') for job in ready])
 
    @Client.shutdown
    def stop(self, progress):

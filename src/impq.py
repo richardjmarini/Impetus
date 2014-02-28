@@ -89,7 +89,7 @@ class Job(Autovivification):
 
    statuses= ("waiting", "processing", "ready", "error")
 
-   def __init__(self, *args, **kwargs):
+   def __init__(self, **kwargs):
 
       id= kwargs.get("id")
       if not id:
@@ -103,7 +103,7 @@ class Job(Autovivification):
 
       status= Status(*self.statuses)
 
-      kwargs.update([("id", id), ("created", created), ("status", status), ("args", args)])
+      kwargs.update([("id", id), ("created", created), ("status", status)]) #, ("args", args)])
 
       super(Job, self).__init__(**kwargs)
 
@@ -339,7 +339,7 @@ class Client(object):
                else:
                   continue
 
-               print "killing", job_id
+               #print "killing", job_id
                self.kill(job_id)
 
             if len(ready) or len(errors):
@@ -348,7 +348,6 @@ class Client(object):
             self._thread_progress(current_thread.name, "processed", len(ready) + len(errors))
             self._show_progress(current_thread)
 
-            print len(jobs), previous_thread.is_alive()
             if len(jobs) == 0 and previous_thread != None and previous_thread.is_alive() == False:
                print "%s %s completed" % (datetime.utcnow(), current_thread.name)
                stdout.flush()
@@ -365,7 +364,7 @@ class Client(object):
    def fork(self, method, args, callback= None, priority= None):
 
       current_thread= currentThread()
-      print "FFFFFFFFFFFFFFFORK", args
+      
       job= Job(
          client= self.id,
          name= method.func_name,
@@ -375,7 +374,6 @@ class Client(object):
          result= None,
          transport= None
       )
-      print job
 
       if priority:
          setattr(job, "priority", priority)
@@ -499,7 +497,7 @@ class Worker(Process):
          job.promote()
 
          print "processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status")
-         print job
+         #print job
          stdout.flush()
 
          method= FunctionType(loads(job.get("code")), globals(), job.get("name"))
