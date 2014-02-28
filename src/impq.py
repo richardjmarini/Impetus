@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from copy import deepcopy
 from os import path, makedirs
 from sys import stdout, stderr, exc_info
 from multiprocessing import Process
@@ -10,6 +11,7 @@ from itertools import izip
 from time import sleep
 from Queue import PriorityQueue , Empty
 from marshal import dumps, loads
+from json import dumps as json_dumps
 from types import FunctionType
 from threading import Thread, Lock, currentThread
 from codecs import open as utf8open
@@ -307,7 +309,7 @@ class Client(object):
    
       def _shutdown(self):
 
-         shutdown(self, self._progress)
+         shutdown(self, self.ready, self.errors, self._progress)
 
       global _thread_order
       _shutdown.order= _thread_order

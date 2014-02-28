@@ -27,14 +27,9 @@ class MyBot(Client):
       print sum([job.get('result') for job in ready])
 
    @Client.shutdown
-   def stop(self, progress):
+   def stop(self, ready, errors, progress):
 
       print "shutting down"
-
-   @Client.shutdown
-   def stop2(self, progresS):
-       print "all done now"
-
 
 if __name__ == '__main__':
 
