@@ -209,15 +209,15 @@ class Queue(object):
 
    def get(self, channel_id, block= False):
 
-      if channel_id not in self.channels:
-         raise Exception("invalid channel_id [%s]" % (channel_id))
+      #if channel_id not in self.channels:
+      #   return None
 
       try:
          
          (job_priority, job_id)= self.channels[channel_id].stream.get(block).pop()
          job= self.channels[channel_id].store.get(job_id)
          print "job picked up: ", job.get("id")
-      except Empty:
+      except: # Empty:
          job= None
 
       return job
@@ -228,10 +228,14 @@ class Queue(object):
 
    def jobs(self, channel_id):
 
-      if channel_id not in self.channels:
-         raise Exception("invalid channel_id [%s]" % (channel_id))
+      #if channel_id not in self.channels:
+      #   raise Exception("invalid channel_id [%s]" % (channel_id))
 
-      store= self.channels[channel_id].store
+      try:
+         store= self.channels[channel_id].store
+      except KeyError:
+         store= {}
+         
 
       return store
 
@@ -355,7 +359,7 @@ class Client(object):
                stdout.flush()
                self.alive= False
 
-            sleep(0.1)
+            sleep(0.01)
          
       global _thread_order
       _process.order= _thread_order
@@ -363,11 +367,12 @@ class Client(object):
        
       return _process
 
-   def fork(self, method, args, callback= None, priority= None):
+   def fork(self, method, args, callback= None, priority= None, job_id= None):
 
       current_thread= currentThread()
       
       job= Job(
+         id= job_id,
          client= self.id,
          name= method.func_name,
          code= dumps(method.func_code),
@@ -499,7 +504,7 @@ class Worker(Process):
          self.status.next()
          job.promote()
 
-         print "processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status")
+         print "processing job (%s): %s, %s" % (self.pid, job.get("id"), job.get("name"))
          #print job
          stdout.flush()
 
@@ -511,7 +516,7 @@ class Worker(Process):
          #self.impq.task_done(job)
          self.status.previous()
 
-         print "completed job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status")
+         print "completed job (%s): %s, %s" % (self.pid, job.get("id"), job.get("name"))
 
       except Exception, e:
 
@@ -530,7 +535,7 @@ class Worker(Process):
          for channel_id in self.impq.get_channels():
             self.process(channel_id)
 
-         sleep(1)
+         sleep(0.01)
 
 class Node(object):
 
@@ -555,8 +560,7 @@ class Node(object):
    
          for pid, worker in self.workers.items():
             print "process_id: %s, status: %s" % (pid, worker.status.current)
-            stdout.flush()
-            sleep(1)
+         sleep(5)
 
 
 if __name__ == "__main__":

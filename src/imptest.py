@@ -18,8 +18,8 @@ class MyBot(Client):
    @Client.startup
    def start(self):
 
-      for i in range(0, 10):
-         self.fork(self.pow, args= i)
+      for i in range(0, 100):
+         self.fork(self.pow, args= i, job_id= i)
 
    @Client.process
    def stage1(self, ready, errors):
