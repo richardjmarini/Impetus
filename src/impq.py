@@ -491,11 +491,11 @@ class Worker(Process):
 
    def process(self, channel_id):
 
-      print "processing channel", channel_id
+      #print "processing channel", channel_id
       try:
          job= self.impq.get(channel_id)
          if job._getvalue() == None:
-            print "No Jobs"
+            #print "No Jobs"
             return
       except Exception, e:
          print >> stderr, "error:", str(e)
@@ -504,7 +504,7 @@ class Worker(Process):
          self.status.next()
          job.promote()
 
-         print "processing job (%s): %s, %s" % (self.pid, job.get("id"), job.get("name"))
+         print "processing job (%s): %s, %s, %s" % (self.pid, channel_id, job.get("id"), job.get("name"))
          #print job
          stdout.flush()
 
@@ -516,7 +516,7 @@ class Worker(Process):
          #self.impq.task_done(job)
          self.status.previous()
 
-         print "completed job (%s): %s, %s" % (self.pid, job.get("id"), job.get("name"))
+         print "completed job (%s): %s, %s, %s" % (self.pid, channel_id, job.get("id"), job.get("name"))
 
       except Exception, e:
 
@@ -558,9 +558,14 @@ class Node(object):
 
       while self.alive:
    
-         for pid, worker in self.workers.items():
-            print "process_id: %s, status: %s" % (pid, worker.status.current)
+         #for pid, worker in self.workers.items():
+         #   print "process_id: %s, status: %s" % (pid, worker.status.current)
          sleep(5)
+
+      print "shutting down"
+      for pid, worker in self.workers.items():
+         print "waiting for process_id %s to shutdown" % (pid)
+         worker.join()
 
 
 if __name__ == "__main__":
