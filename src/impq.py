@@ -556,7 +556,6 @@ class Worker(Process):
          job.promote("error")
 
 
-
    def run(self):
 
       try:
@@ -581,6 +580,7 @@ class Node(object):
 
    def run(self):
 
+      print "started", self.max_processes
       while self.alive:
 
          # stop tracking dead workers
@@ -601,6 +601,8 @@ class Node(object):
       for (pid, worker) in self.worker.items():
          print "waiting for", pid
          worker.join()
+ 
+      print "shutdown complete."
 
 
 if __name__ == "__main__":
