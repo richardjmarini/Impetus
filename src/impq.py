@@ -164,6 +164,7 @@ class Queue(object):
       self.manager= SyncManager(address= (host, int(port)), authkey= security_key)
       self.manager.register("create_channel", callable= self.create_channel)
       self.manager.register("delete_channel", callable= self.delete_channel)
+      self.manager.register("qsize", callable= self.qsize)
       self.manager.register("put", callable= self.put)
       self.manager.register("kill", callable= self.kill)
       self.manager.register("get", callable= self.get, proxytype= Job)
@@ -206,6 +207,15 @@ class Queue(object):
       self.channels[channel_id].stream.put([(job.get("priority"), job.get("id"))])
 
       return channel_id
+
+   def qsize(self, channel_id):
+   
+      try:
+         qsize= self.channels[channel_id].stream.qsize()
+      except KeyError:
+         qsize= 0
+
+      return qsize
 
    def get(self, channel_id, block= False):
 
@@ -474,6 +484,17 @@ class Worker(Process):
 
       super(Worker, self).__init__()
 
+      self.alive= True
+      self.status= Status(*self.statuses)
+
+      self.host= host
+      self.port= port
+      self.security_key= security_key
+      self.connect()
+
+
+   def connect(self):
+
       SyncManager.register("get")
       SyncManager.register("peek")
       SyncManager.register("put")
@@ -483,15 +504,22 @@ class Worker(Process):
       SyncManager.register("task_done")
       SyncManager.register("get_channels")
 
-      self.impq= SyncManager(address= (host, int(port)), authkey= security_key)
-      self.impq.connect()
+      while self.alive:
 
-      self.alive= True
-      self.status= Status(*self.statuses)
+         print "attempting to connect"
+         try:
+            self.impq= SyncManager(address= (self.host, int(self.port)), authkey= self.security_key)
+            self.impq.connect()
+            print "connected"
+            break
+         except:    
+            print "could not connect"
+
+         sleep(3)
 
    def process(self, channel_id):
 
-      #print "processing channel", channel_id
+      #print "processing channel", channel_id, self.impq.qsize(channel_id)
       try:
          job= self.impq.get(channel_id)
          if job._getvalue() == None:
@@ -532,8 +560,12 @@ class Worker(Process):
 
       while self.alive:
 
-         for channel_id in self.impq.get_channels():
-            self.process(channel_id)
+         try:
+            for channel_id in self.impq.get_channels():
+               self.process(channel_id)
+         except Exception, e:  #EOFError, IOError:
+            print "disconnted: %s" % str(e)
+            self.connect()
 
          sleep(0.01)
 
@@ -544,7 +576,7 @@ class Node(object):
       self.host= host
       self.port= port
       self.security_key= security_key
-      self.max_processes= 5
+      self.max_processes= max_processes
 
       self.alive= True
       self.workers= {}
