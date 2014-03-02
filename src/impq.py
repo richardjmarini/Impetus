@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 from os import path, makedirs
-from sys import stdout, stderr, exc_info
+from sys import stdout, stderr, exc_info, exit
 from multiprocessing import Process
 from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
 from uuid import uuid1
@@ -16,6 +16,7 @@ from types import FunctionType
 from threading import Thread, Lock, currentThread
 from codecs import open as utf8open
 from traceback import extract_tb
+from socket import error as SocketError
 
 class Autovivification(object):
 
@@ -490,8 +491,8 @@ class Worker(Process):
       self.host= host
       self.port= port
       self.security_key= security_key
-      self.connect()
 
+      self.connect()
 
    def connect(self):
 
@@ -506,17 +507,14 @@ class Worker(Process):
 
       while self.alive:
 
-         print "attempting to connect"
          try:
             self.impq= SyncManager(address= (self.host, int(self.port)), authkey= self.security_key)
-            self.impq.connect()
-            print "connected"
+            self.impq.connect() 
             break
-         except:    
-            print "could not connect"
-
-         sleep(3)
-
+         except (EOFError, IOError, SocketError) as e:
+            print "could not connect ...trying again", self.pid
+            sleep(1)
+          
    def process(self, channel_id):
 
       #print "processing channel", channel_id, self.impq.qsize(channel_id)
@@ -527,6 +525,7 @@ class Worker(Process):
             return
       except Exception, e:
          print >> stderr, "error:", str(e)
+         return
 
       try:
          self.status.next()
@@ -550,24 +549,23 @@ class Worker(Process):
 
          (filename, linenumber, functionname, statement)= extract_tb(exc_info()[2])[-1]
          result= {"error": str(e), "name": functionname, "linenumber": linenumber, "statement": statement}
+
+         print >> stderr, "error processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status"), str(e)
+
          job.update([("result", result)])
          job.promote("error")
 
-         print >> stderr, "error processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status"), str(e)
 
 
    def run(self):
 
-      while self.alive:
-
-         try:
-            for channel_id in self.impq.get_channels():
-               self.process(channel_id)
-         except Exception, e:  #EOFError, IOError:
-            print "disconnted: %s" % str(e)
-            self.connect()
-
-         sleep(0.01)
+      try:
+         # TODO: channel routing (round robin, etc..)
+         for channel_id in self.impq.get_channels():
+            self.process(channel_id)
+      except (EOFError, IOError, SocketError) as e:
+         print "not connected", self.pid  
+         self.alive= False
 
 class Node(object):
 
@@ -583,20 +581,25 @@ class Node(object):
 
    def run(self):
 
-      for i in range(self.max_processes):
-         worker= Worker(self.host, self.port, self.security_key)
-         worker.start()
-         self.workers.update([(worker.pid, worker)])
-
       while self.alive:
-   
-         #for pid, worker in self.workers.items():
-         #   print "process_id: %s, status: %s" % (pid, worker.status.current)
-         sleep(5)
 
-      print "shutting down"
-      for pid, worker in self.workers.items():
-         print "waiting for process_id %s to shutdown" % (pid)
+         # stop tracking dead workers
+         for (pid, worker) in self.workers.items():
+            if not worker.is_alive():
+               #print "dead", pid
+               self.workers.pop(pid)
+
+         # spwan new workers
+         #print "creating workers %s/%s/%s" % (self.max_processes - len(self.workers), len(self.workers), self.max_processes)
+         for i in range(self.max_processes - len(self.workers)):
+            worker= Worker(self.host, self.port, self.security_key)
+            worker.start()
+            #print "created new worker", worker.pid
+            self.workers.update([(worker.pid, worker)])
+
+      # wait for workers to finish before shutting down
+      for (pid, worker) in self.worker.items():
+         print "waiting for", pid
          worker.join()
 
 
