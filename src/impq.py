@@ -165,7 +165,8 @@ class Queue(object):
       self.manager= SyncManager(address= (host, int(port)), authkey= security_key)
       self.manager.register("create_channel", callable= self.create_channel)
       self.manager.register("delete_channel", callable= self.delete_channel)
-      self.manager.register("qsize", callable= self.qsize)
+      self.manager.register("stream_size", callable= self.stream_size)
+      self.manager.register("store_size", callable= self.store_size)
       self.manager.register("put", callable= self.put)
       self.manager.register("kill", callable= self.kill)
       self.manager.register("get", callable= self.get, proxytype= Job)
@@ -194,7 +195,6 @@ class Queue(object):
 
       return channels
 
-
    def put(self, job, channel_id= None):
 
       if not channel_id:
@@ -209,14 +209,23 @@ class Queue(object):
 
       return channel_id
 
-   def qsize(self, channel_id):
+   def stream_size(self, channel_id):
    
       try:
-         qsize= self.channels[channel_id].stream.qsize()
+         stream_size= self.channels[channel_id].stream.qsize()
       except KeyError:
-         qsize= 0
+         stream_size= 0
 
-      return qsize
+      return stream_size
+
+   def store_size(self, channel_id):
+
+      try:
+         store_size= len(self.channels[channel_id].store)
+      except KeyError:
+         store_size= 0
+
+      return store_size
 
    def get(self, channel_id, block= False):
 
@@ -246,7 +255,6 @@ class Queue(object):
          store= self.channels[channel_id].store
       except KeyError:
          store= {}
-         
 
       return store
 
@@ -497,11 +505,8 @@ class Worker(Process):
    def connect(self):
 
       SyncManager.register("get")
-      SyncManager.register("peek")
-      SyncManager.register("put")
-      SyncManager.register("del")
-      SyncManager.register("empty")
-      SyncManager.register("qsize")
+      SyncManager.register("stream_size")
+      SyncManager.register("store_size")
       SyncManager.register("task_done")
       SyncManager.register("get_channels")
 
@@ -517,7 +522,7 @@ class Worker(Process):
           
    def process(self, channel_id):
 
-      #print "processing channel", channel_id, self.impq.qsize(channel_id)
+      print "processing channel", channel_id, self.impq.stream_size(channel_id), self.impq.store_size(channel_id)
       try:
          job= self.impq.get(channel_id)
          if job._getvalue() == None:
@@ -578,6 +583,23 @@ class Node(object):
       self.alive= True
       self.workers= {}
 
+      self.connect()
+
+   def connect(self):
+
+      SyncManager.register("stream_size")
+      SyncManager.register("store_size")
+
+      while self.alive:
+
+         try:
+            self.impq= SyncManager(address= (self.host, int(self.port)), authkey= self.security_key)
+            self.impq.connect() 
+            break
+         except (EOFError, IOError, SocketError) as e:
+            print "could not connect ...trying again", self.pid
+            sleep(1)
+
    def run(self):
 
       print "started", self.max_processes
@@ -590,8 +612,16 @@ class Node(object):
                self.workers.pop(pid)
 
          # spwan new workers
-         #print "creating workers %s/%s/%s" % (self.max_processes - len(self.workers), len(self.workers), self.max_processes)
-         for i in range(self.max_processes - len(self.workers)):
+         try:
+            num_jobs= sum([self.impq.stream_size(channel_id) for channel_id in self.impq.get_channels()])
+         except (EOFError, IOError, SocketError) as e:
+            print "node disconnected", str(e)
+            self.connect()
+            continue
+
+         new_workers= min(num_jobs, self.max_processes - len(self.workers))
+         print "creating workers %s/%s/%s" % (new_workers, len(self.workers), self.max_processes)
+         for i in range(new_workers):
             worker= Worker(self.host, self.port, self.security_key)
             worker.start()
             #print "created new worker", worker.pid

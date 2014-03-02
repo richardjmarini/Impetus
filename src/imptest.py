@@ -3,7 +3,7 @@
 from Queue import Empty
 from sys import stdout
 from impq import Client
-
+from time import sleep
 
 class MyBot(Client):
 
@@ -18,8 +18,9 @@ class MyBot(Client):
    @Client.startup
    def start(self):
 
-      for i in range(0, 100):
+      for i in range(0, 10000):
          self.fork(self.pow, args= i)
+         sleep(0.25)
 
    @Client.process
    def stage1(self, ready, errors):
