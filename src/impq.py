@@ -329,7 +329,13 @@ class Worker(Process):
          job_id= None
          job= {}
 
-         (priority, job_id)= self.stream.get(block= True).pop()
+         try:
+            (priority, job_id)= self.stream.get(block= True, timeout= 30).pop()
+         except Empty:
+            print "channel idle", self.channel_id
+            self.alive= False
+            return
+
          self.status= "busy"
 
          job= self.store.get(job_id)
@@ -420,7 +426,7 @@ class Node(object):
           
       for channel_id in streams.keys():
          if channel_id not in channels.keys():
-            print 'stopping tracking channel', channel_id
+            print 'stopped tracking channel', channel_id
             streams.pop(channel_id)
 
    def process(self):
