@@ -17,6 +17,7 @@ from threading import Thread, Lock, currentThread
 from codecs import open as utf8open
 from traceback import extract_tb
 from socket import error as SocketError
+from atexit import register
 
 class Autovivification(object):
 
@@ -325,6 +326,9 @@ class Worker(Process):
       try:
 
          print "processing channel", self.channel_id
+         job_id= None
+         job= {}
+
          (priority, job_id)= self.stream.get(block= True).pop()
          self.status= "busy"
 
@@ -345,6 +349,7 @@ class Worker(Process):
          (filename, linenumber, functionname, statement)= extract_tb(exc_info()[2])[-1]
          result= {"error": str(e), "name": functionname, "linenumber": linenumber, "statement": statement}
 
+         job= self.store.get(job_id)
          print >> stderr, "error processing job:", self.pid, job.get("id"), job.get("name"), job.get("status"), str(e), functionname, linenumber, statement
 
          job.update([("result", result), ("status", "error")])
@@ -375,7 +380,10 @@ class Node(object):
       self.security_key= security_key
       self.max_processes= max_processes
 
+      self.workers= {}
       self.alive= True
+
+      register(self.shutdown)
       self.connect()
 
    def connect(self):
@@ -419,7 +427,6 @@ class Node(object):
 
       print "started", self.max_processes
 
-      workers= {}
       channels= self.impq.get_channels()
       streams= dict([(channel_id, (self.impq.get_stream(channel_id), self.impq.get_store(channel_id))) for channel_id in channels.keys()])
 
@@ -428,24 +435,29 @@ class Node(object):
          self.update_streams(channels, streams)
 
          # stop tracking dead workers
-         for (channel_id, worker) in workers.items():
+         for (channel_id, worker) in self.workers.items():
             if not worker.is_alive():
                #print "dead", channel_id
-               workers.pop(channel_id)
+               self.workers.pop(channel_id)
 
-         #print "creating workers %s/%s/%s" % (len(streams.keys()), len(workers), self.max_processes)
+         #print "creating workers %s/%s/%s" % (len(streams.keys()), len(self.workers), self.max_processes)
          for (channel_id, (stream, store)) in streams.items():
-            if channel_id not in workers.keys():
+            if channel_id not in self.workers.keys():
                worker= Worker(channel_id, stream, store)
                worker.start()
-               workers.update([(channel_id, worker)])
+               self.workers.update([(channel_id, worker)])
+
+      self.shutdown()
+
+   def shutdown(self):
 
       # wait for workers to finish before shutting down
-      for (channel_id, worker) in workers.items():
+      print "shutting down node..."
+      for (channel_id, worker) in self.workers.items():
          print "waiting for worker", channel_id
          worker.join()
  
-      print "shutdown complete."
+      print "node shutdown complete."
 
    def run(self):
 
