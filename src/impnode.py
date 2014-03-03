@@ -2,7 +2,6 @@
 
 from Queue import Empty
 from sys import stdout
-from impq import Job
 from multiprocessing.managers import SyncManager
 from time import sleep
 from impq import Node

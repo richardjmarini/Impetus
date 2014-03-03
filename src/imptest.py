@@ -18,14 +18,20 @@ class MyBot(Client):
    @Client.startup
    def start(self):
 
-      for i in range(0, 10000):
+      for i in range(0, 100):
          self.fork(self.pow, args= i)
          sleep(0.25)
 
    @Client.process
    def stage1(self, ready, errors):
 
-      print sum([job.get('result') for job in ready])
+      total= 0
+      for job in ready:
+         total+= job.get('result')
+         sleep(0.24)
+ 
+      print "Total:", total
+      print "Errors:", len(errors)
 
    @Client.shutdown
    def stop(self, ready, errors, progress):

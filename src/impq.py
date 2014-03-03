@@ -33,117 +33,6 @@ class Autovivification(object):
          else:
             setattr(self, pname, pvalue)
 
-class Status(object):
-
-   def __init__(self, *statuses):
-
-      super(Status, self).__init__()
-      self._statuses= statuses
-
-      for id, label in enumerate(self._statuses):
-         setattr(self, label, id)
-
-      self.current= 0
-
-   def get(self, status= None):
-
-      if status == None:
-         return self.current_status
-
-      statuses= enumerate(self._statuses)
-      if status in self._statuses:
-         statuses= map(reversed, statuses)
-
-      return dict(statuses).get(status)
-
-   def flags(self):
-
-      return self._statuses
-
-   def __iter__(self):
-
-      return self
-
-   def next(self):
-      if self.current >= len(self._statuses):
-         self.current= len(self._statuses)-1
-
-      self.current+= 1
-      return self._statuses[self.current-1]
-
-   def reset(self):
-
-      self.current= 0
-
-   def previous(self):
-
-      self.current-= 1
-      if self.current < 0:
-         self.current= 0
-
-      return self.current
-
-   def __repr__(self):
-
-      return repr(self.current)
-
-
-class Job(Autovivification):
-
-   statuses= ("waiting", "processing", "ready", "error")
-
-   def __init__(self, **kwargs):
-
-      id= kwargs.get("id")
-      if not id:
-         id= str(uuid1())
-      else:
-         del kwargs["id"]
-
-      created= kwargs.get("created")
-      if not created:
-         created= datetime.utcnow()
-
-      status= Status(*self.statuses)
-
-      kwargs.update([("id", id), ("created", created), ("status", status)]) #, ("args", args)])
-
-      super(Job, self).__init__(**kwargs)
-
-   def promote(self, status= None):
-
-      if status:
-         while self.status.current != self.status.get(status):
-            self.status.next()
-      else:
-         self.status.next()
-
-   def reset(self):
-
-      self.status.reset()
-
-   def demote(self, status= None):
-
-      if status:
-         while self.status.current != self.status.get(status):
-            self.status.previous()
-      else:
-         self.status.previous()
-
-   def update(self, attributes):
-
-      for (name, value) in attributes:
-         setattr(self, name, value)
-
-   def get(self, attribute, default= None):
-
-      return getattr(self, attribute) if hasattr(self, attribute) else default
-
-   def __repr__(self):
-
-      return repr(self.__dict__)
-
-
 class Channel(object):
  
    def __init__(self, **properties):
@@ -153,6 +42,21 @@ class Channel(object):
       self.properties= properties
       self.stream= PriorityQueue()
       self.store= {}
+
+class Job(dict):
+
+   def __init__(self, **kwargs):
+
+      if not kwargs.get("id"):
+         kwargs["id"]= str(uuid1())
+
+      if not kwargs.get("created"):
+         kwargs["created"]= datetime.utcnow()
+
+      if not kwargs.get("status"):
+         kwargs["status"]= "waiting"
+
+      super(Job, self).__init__(**kwargs)
 
 class Queue(object):
 
@@ -165,14 +69,9 @@ class Queue(object):
       self.manager= SyncManager(address= (host, int(port)), authkey= security_key)
       self.manager.register("create_channel", callable= self.create_channel)
       self.manager.register("delete_channel", callable= self.delete_channel)
-      self.manager.register("stream_size", callable= self.stream_size)
-      self.manager.register("store_size", callable= self.store_size)
-      self.manager.register("put", callable= self.put)
-      self.manager.register("kill", callable= self.kill)
-      self.manager.register("get", callable= self.get, proxytype= Job)
-      self.manager.register("jobs", callable= self.jobs, proxytype= DictProxy)
-      self.manager.register("task_done", callable= self.task_done)
-      self.manager.register("get_channels", callable= self.get_channels, proxytype= DictProxy)
+      self.manager.register("get_channels", callable=  lambda: self.channels, proxytype= DictProxy)
+      self.manager.register("get_store", callable=  lambda channel_id: self.channels[channel_id].store, proxytype= DictProxy)
+      self.manager.register("get_stream", callable=  lambda channel_id: self.channels[channel_id].stream, proxytype= PriorityQueue)
 
    def create_channel(self, **properties):
 
@@ -183,88 +82,10 @@ class Queue(object):
 
       self.channels[channel_id]= channel
 
-      return channel_id
+   def delete_channel(self, **properties):
 
-   def delete_channel(self, channel_id):  
-
+      channel_id= properties.get("channel_id")
       del self.channels[channel_id]
-
-   def get_channels(self):
-
-      channels= [channel_id for channel_id in self.channels.keys()]
-
-      return channels
-
-   def put(self, job, channel_id= None):
-
-      if not channel_id:
-         channel_id= uuid1()
-
-      if channel_id not in self.channels:
-         print >> stderr, "warning: creating non-existent channel [%s]" % (channel_id)
-         self.create_channel(channel_id= channel_id)
- 
-      self.channels[channel_id].store.update([(job.get("id"), job)])
-      self.channels[channel_id].stream.put([(job.get("priority"), job.get("id"))])
-
-      return channel_id
-
-   def stream_size(self, channel_id):
-   
-      try:
-         stream_size= self.channels[channel_id].stream.qsize()
-      except KeyError:
-         stream_size= 0
-
-      return stream_size
-
-   def store_size(self, channel_id):
-
-      try:
-         store_size= len(self.channels[channel_id].store)
-      except KeyError:
-         store_size= 0
-
-      return store_size
-
-   def get(self, channel_id, block= False):
-
-      #if channel_id not in self.channels:
-      #   return None
-
-      try:
-         
-         (job_priority, job_id)= self.channels[channel_id].stream.get(block).pop()
-         job= self.channels[channel_id].store.get(job_id)
-         print "job picked up: ", job.get("id")
-      except: # Empty:
-         job= None
-
-      return job
-
-   def kill(self, job_id, channel_id):
-
-      self.channels[channel_id].store.pop(job_id)
-
-   def jobs(self, channel_id):
-
-      #if channel_id not in self.channels:
-      #   raise Exception("invalid channel_id [%s]" % (channel_id))
-
-      try:
-         store= self.channels[channel_id].store
-      except KeyError:
-         store= {}
-
-      return store
-
-   def task_done(self, job, channel_id):
-
-      if channel_id not in self.channels:
-         raise Exception("invalid channel_id [%s]" % (channel_id))
-
-      self.channels[channel_id].store.update([(job.get("id"), job)])
-      self.channels[channel_id].stream.task_done()
 
    def run(self):
 
@@ -276,22 +97,26 @@ class Queue(object):
 _thread_order= 0
 class Client(object):
 
+   statuses= ("forked", "processed")
+
    def __init__(self, host, port, security_key, id= None, task_dir= "tasks"):
 
       self.id= id if id else str(uuid1())
       self.task_dir= path.join(task_dir, self.id)
-      self.status= Status("forked", "processed")
 
       self.impq= SyncManager(address= (host, port), authkey= security_key)
+      self.impq.register("get_channels")
       self.impq.register("create_channel")
       self.impq.register("delete_channel")
-      self.impq.register("put")
-      self.impq.register("kill")
+      self.impq.register("get_store")
+      self.impq.register("get_stream")
       self.impq.register("jobs")
       self.impq.connect()
-      self.impq.create_channel(channel_id= self.id)
 
       self.jobs= []
+      self.impq.create_channel(channel_id= self.id)
+      self.store= self.impq.get_store(channel_id= self.id)
+      self.stream= self.impq.get_stream(channel_id= self.id)
       self.alive= True
       self._current_thread= None
       self._lock= Lock()
@@ -347,25 +172,23 @@ class Client(object):
          if current_thread.name == 'MainThread':
             return
          previous_thread= current_thread.previous_thread
-         status= Status(*Job.statuses)
 
          while self.alive:
 
             self._thread_regulator(current_thread, previous_thread)
 
-            jobs= self.impq.jobs(self.id)
             ready= []
             errors= []
-            for job_id, job in jobs.items():
-               if job.status.current == status.get("ready"):
+            for job in self.store.values():
+               if job.get("status") == "ready":
                   ready.append(job)
-               elif job.status.current == status.get("error"):
+               elif job.get("status") == "error":
                   errors.append(job)
                else:
                   continue
 
-               #print "killing", job_id
-               self.kill(job_id)
+               #print "killing", job.get("id")
+               self.store.pop(job.get("id"))
 
             if len(ready) or len(errors):
                process(self, ready, errors)
@@ -373,7 +196,7 @@ class Client(object):
             self._thread_progress(current_thread.name, "processed", len(ready) + len(errors))
             self._show_progress(current_thread)
 
-            if len(jobs) == 0 and previous_thread != None and previous_thread.is_alive() == False:
+            if len(self.store) == 0 and previous_thread != None and previous_thread.is_alive() == False:
                print "%s %s completed" % (datetime.utcnow(), current_thread.name)
                stdout.flush()
                self.alive= False
@@ -391,7 +214,6 @@ class Client(object):
       current_thread= currentThread()
       
       job= Job(
-         id= job_id,
          client= self.id,
          name= method.func_name,
          code= dumps(method.func_code),
@@ -400,27 +222,26 @@ class Client(object):
          result= None,
          transport= None
       )
-
+      
       if priority:
          setattr(job, "priority", priority)
 
-      self.impq.put(job, channel_id= self.id)
+      self.store.update([(job.get("id"), job)])
+      self.stream.put([(job.get("priority"), job.get("id"))])
+  
+      #print "forked", len(self.store)
+      
       self.jobs.append(job.get("id"))
-
+      
       self._thread_progress(current_thread.name, "forked", 1)
-
+      
       return job.get("id")
-
-   def kill(self, job_id):
-
-      self.impq.kill(job_id, channel_id= self.id)
-
 
    def _thread_progress(self, name, status, count):
 
       with self._lock:
  
-         progress= self._progress.get(name, dict([(s, 0) for s in self.status.flags()]))
+         progress= self._progress.get(name, dict([(s, 0) for s in self.statuses]))
          progress.update([(status, progress.get(status, 0) + count)])
          self._progress.update([(name, progress)])
 
@@ -429,10 +250,10 @@ class Client(object):
       msg= []
       with self._lock:
          for thread in self.threads:
-            progress= self._progress.get(thread.name, dict([(s, 0) for s in self.status.flags()]))
+            progress= self._progress.get(thread.name, dict([(s, 0) for s in self.statuses]))
             msg.append("%s %s/%s -> " % (thread.name, progress.get("forked"), progress.get("processed")))
 
-      print "thread: %s %s" % (current_thread.name, ''.join(msg)[:-4])
+      print "thread: %s via %s" % (''.join(msg)[:-4], current_thread.name)
          
    def _thread_regulator(self, current_thread, previous_thread):
 
@@ -487,91 +308,63 @@ class Client(object):
 
 class Worker(Process):
 
-   statuses= ("idle", "working")
+   statuses= ("idle", "busy")
 
-   def __init__(self, host, port, security_key):
+   def __init__(self, channel_id, stream, store):
 
       super(Worker, self).__init__()
 
       self.alive= True
-      self.status= Status(*self.statuses)
+      self.status= "idle"
+      self.channel_id= channel_id
+      self.stream= stream
+      self.store= store
 
-      self.host= host
-      self.port= port
-      self.security_key= security_key
-
-      self.connect()
-
-   def connect(self):
-
-      SyncManager.register("get")
-      SyncManager.register("stream_size")
-      SyncManager.register("store_size")
-      SyncManager.register("task_done")
-      SyncManager.register("get_channels")
-
-      while self.alive:
-
-         try:
-            self.impq= SyncManager(address= (self.host, int(self.port)), authkey= self.security_key)
-            self.impq.connect() 
-            break
-         except (EOFError, IOError, SocketError) as e:
-            print "could not connect ...trying again", self.pid
-            sleep(1)
-          
-   def process(self, channel_id):
-
-      print "processing channel", channel_id, self.impq.stream_size(channel_id), self.impq.store_size(channel_id)
-      try:
-         job= self.impq.get(channel_id)
-         if job._getvalue() == None:
-            #print "No Jobs"
-            return
-      except Exception, e:
-         print >> stderr, "error:", str(e)
-         return
+   def process(self):
 
       try:
-         self.status.next()
-         job.promote()
 
-         print "processing job (%s): %s, %s, %s" % (self.pid, channel_id, job.get("id"), job.get("name"))
-         #print job
-         stdout.flush()
+         print "processing channel", self.channel_id
+         (priority, job_id)= self.stream.get(block= True).pop()
+         self.status= "busy"
+
+         job= self.store.get(job_id)
+         job.update([("status", "processing")])
+         self.store.update([(job.get("id"), job)])
+
+         print "processing job (%s): %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
 
          method= FunctionType(loads(job.get("code")), globals(), job.get("name"))
          result= method(job.get("args"))
-         job.update([("result", result)])
-         job.promote()
+         job.update([("result", result), ("status", "ready")])
+         self.store.update([(job.get("id"), job)])
 
-         #self.impq.task_done(job)
-         self.status.previous()
-
-         print "completed job (%s): %s, %s, %s" % (self.pid, channel_id, job.get("id"), job.get("name"))
-
+         print "completed job (%s): %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
       except Exception, e:
 
          (filename, linenumber, functionname, statement)= extract_tb(exc_info()[2])[-1]
          result= {"error": str(e), "name": functionname, "linenumber": linenumber, "statement": statement}
 
-         print >> stderr, "error processing job:", self.pid, self.status.current, job.get("id"), job.get("name"), job.get("status"), str(e)
+         print >> stderr, "error processing job:", self.pid, job.get("id"), job.get("name"), job.get("status"), str(e), functionname, linenumber, statement
 
-         job.update([("result", result)])
-         job.promote("error")
+         job.update([("result", result), ("status", "error")])
+         self.store.update([(job.get("id"), job)])
 
+      self.status= "idle"
 
    def run(self):
 
-      try:
-         # TODO: channel routing (round robin, etc..)
-         for channel_id in self.impq.get_channels():
-            self.process(channel_id)
-      except (EOFError, IOError, SocketError) as e:
-         print "not connected", self.pid  
-         self.alive= False
+      while self.alive:
 
-      print ">>>>>>", self.impq.__dict__
+         try:
+            self.process()
+         except (UnboundLocalError, EOFError, IOError, SocketError) as e:
+            print >> stderr, "worker communication error:", self.channel_id, str(e)
+            self.status= "idle"
+            self.alive=  False
+
+         sleep(0.01)
+
 
 class Node(object):
 
@@ -583,15 +376,21 @@ class Node(object):
       self.max_processes= max_processes
 
       self.alive= True
-      self.workers= {}
-
       self.connect()
 
    def connect(self):
 
-      SyncManager.register("stream_size")
-      SyncManager.register("store_size")
+      # remove connection from cache:
+      # BaseProxy class has thread local storage which caches the connection
+      # which is reused for future connections causing "borken pipe" errors on 
+      # creating new manager.  
+      if (self.host, int(self.port)) in BaseProxy._address_to_local:
+         del BaseProxy._address_to_local[(self.host, int(self.port))][0].connection
+
+      # register handlers
       SyncManager.register("get_channels")
+      SyncManager.register("get_stream")
+      SyncManager.register("get_store")
 
       while self.alive:
 
@@ -600,42 +399,63 @@ class Node(object):
             self.impq.connect() 
             break
          except (EOFError, IOError, SocketError) as e:
-            print "could not connect ...trying again", self.pid
+            print "could not connect ...trying again", str(e)
             sleep(1)
 
-   def run(self):
+   def update_streams(self, channels, streams):
+
+      # update list of streams to track
+      for channel_id in channels.keys():
+         if channel_id not in streams.keys():
+            print "tracking channel", channel_id
+            streams.update([(channel_id, (self.impq.get_stream(channel_id), self.impq.get_store(channel_id)))])
+          
+      for channel_id in streams.keys():
+         if channel_id not in channels.keys():
+            print 'stopping tracking channel', channel_id
+            streams.pop(channel_id)
+
+   def process(self):
 
       print "started", self.max_processes
+
+      workers= {}
+      channels= self.impq.get_channels()
+      streams= dict([(channel_id, (self.impq.get_stream(channel_id), self.impq.get_store(channel_id))) for channel_id in channels.keys()])
+
       while self.alive:
 
+         self.update_streams(channels, streams)
+
          # stop tracking dead workers
-         for (pid, worker) in self.workers.items():
+         for (channel_id, worker) in workers.items():
             if not worker.is_alive():
-               #print "dead", pid
-               self.workers.pop(pid)
+               #print "dead", channel_id
+               workers.pop(channel_id)
 
-         # spwan new workers
-         try:
-            num_jobs= sum([self.impq.stream_size(channel_id) for channel_id in self.impq.get_channels()])
-         except (EOFError, IOError, SocketError) as e:
-            print "node disconnected", str(e)
-            self.connect()
-            continue
-
-         new_workers= min(num_jobs, self.max_processes - len(self.workers))
-         print "creating workers %s/%s/%s" % (new_workers, len(self.workers), self.max_processes)
-         for i in range(new_workers):
-            worker= Worker(self.host, self.port, self.security_key)
-            worker.start()
-            #print "created new worker", worker.pid
-            self.workers.update([(worker.pid, worker)])
+         #print "creating workers %s/%s/%s" % (len(streams.keys()), len(workers), self.max_processes)
+         for (channel_id, (stream, store)) in streams.items():
+            if channel_id not in workers.keys():
+               worker= Worker(channel_id, stream, store)
+               worker.start()
+               workers.update([(channel_id, worker)])
 
       # wait for workers to finish before shutting down
-      for (pid, worker) in self.worker.items():
-         print "waiting for", pid
+      for (channel_id, worker) in workers.items():
+         print "waiting for worker", channel_id
          worker.join()
  
       print "shutdown complete."
+
+   def run(self):
+
+      while self.alive:
+         try:
+            self.process()
+         except Exception, e:
+            print >> stderr, "node communication error:", str(e)
+            self.connect()
+         sleep(0.01)
 
 
 if __name__ == "__main__":
