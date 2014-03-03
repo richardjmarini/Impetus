@@ -571,6 +571,8 @@ class Worker(Process):
          print "not connected", self.pid  
          self.alive= False
 
+      print ">>>>>>", self.impq.__dict__
+
 class Node(object):
 
    def __init__(self, host, port, security_key, max_processes= 5):
