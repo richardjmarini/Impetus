@@ -589,6 +589,7 @@ class Node(object):
 
       SyncManager.register("stream_size")
       SyncManager.register("store_size")
+      SyncManager.register("get_channels")
 
       while self.alive:
 
