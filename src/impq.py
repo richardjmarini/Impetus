@@ -11,15 +11,16 @@ from datetime import datetime
 from itertools import izip
 from time import sleep
 from Queue import PriorityQueue , Empty
-from marshal import dumps, loads
-from json import dumps as json_dumps, JSONEncoder
-from zlib import compress
+from marshal import dumps as mdumps, loads as mloads
+from json import dumps as jdumps, JSONEncoder
 from types import FunctionType
 from threading import Thread, Lock, currentThread
 from traceback import extract_tb
 from socket import error as SocketError
 from atexit import register
-from codecs import open as utf8open
+from codecs import open as open
+from zlib import compress
+from base64 import b64encode as encode
 
 class Autovivification(object):
 
@@ -192,10 +193,10 @@ class Client(object):
             for job in self.store.values():
                if job.get("status") == "ready":
                   ready.append(job)
-                  self.ready[current_thread.name].write(json_dumps(job, cls= JobEncoder) + "\n")
+                  self.ready[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
                elif job.get("status") == "error":
                   errors.append(job)
-                  self.ready[current_thread.name].write(json_dumps(job, cls= JobEncoder) + "\n")
+                  self.ready[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
                else:
                   continue
 
@@ -228,7 +229,7 @@ class Client(object):
       job= Job(
          client= self.id,
          name= method.func_name,
-         code= dumps(method.func_code),
+         code= mdumps(method.func_code),
          args= args,
          callback= callback.func_name if callback else current_thread.next_thread.name,
          result= None,
@@ -289,8 +290,8 @@ class Client(object):
 
       
       thread= Thread(target= method, name= name, args= (self, ))
-      self.errors[name]= utf8open(path.join(self.task_dir, '.'.join((name, "err"))), 'ab+')
-      self.ready[name]=  utf8open(path.join(self.task_dir, '.'.join((name, "ok"))), 'ab+')
+      self.errors[name]= open(path.join(self.task_dir, '.'.join((name, "err"))), 'ab+')
+      self.ready[name]=  open(path.join(self.task_dir, '.'.join((name, "ok"))), 'ab+')
 
       return thread
  
@@ -355,7 +356,7 @@ class Worker(Process):
 
          print "processing job: %s,  %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
 
-         method= FunctionType(loads(job.get("code")), globals(), job.get("name"))
+         method= FunctionType(mloads(job.get("code")), globals(), job.get("name"))
          result= method(job.get("args"))
          job.update([("result", result), ("status", "ready")])
          self.store.update([(job.get("id"), job)])
