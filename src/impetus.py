@@ -34,7 +34,7 @@ from Queue import PriorityQueue , Empty
 from marshal import dumps as mdumps, loads as mloads
 from json import dumps as jdumps, JSONEncoder
 from types import FunctionType
-from threading import Thread, Lock, currentThread
+from threading import Thread, Lock, currentThread, Event
 from traceback import extract_tb
 from socket import error as SocketError
 from atexit import register
@@ -345,6 +345,22 @@ class Queue(Daemon):
          stdin= path.join(logdir, self.__class__.__name__ + ".in")
       )
 
+      #self.monitor= Thread(target= self.monitor)
+      #self.alive= Event()
+      #register(self.alive.set)
+
+   """
+   def monitor(self):
+     
+      print "starting queue monitor"
+      while self.alive.isSet():
+         for (stream_id, stream) in self.streams.items():
+            print "stream:", stream_id, stream.queue.qsize(), len(stream.store), self.alive.isSet()
+         sleep(1)
+      print "stopping queue monitor"
+
+   """
+
    def create_stream(self, **properties):
 
       stream= Stream(**properties)
@@ -363,6 +379,7 @@ class Queue(Daemon):
 
       server= self.manager.get_server()
       print "running"
+      #self.monitor.start()
       server.serve_forever()
 
 
@@ -661,7 +678,7 @@ class Status(dict):
 
       super(Status, self).__init__(**kwargs)
 
-      self["required"]= self["mpps"] * self["streams"]
+      self["required"]= self["jobs"] - self["active"]
 
 
 class Node(Daemon):
