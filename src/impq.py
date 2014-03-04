@@ -325,14 +325,14 @@ class Worker(Process):
 
       try:
 
-         print "processing channel", self.channel_id
+         print "processing channel", self.pid, self.channel_id
          job_id= None
          job= {}
 
          try:
             (priority, job_id)= self.stream.get(block= True, timeout= 30).pop()
          except Empty:
-            print "channel idle", self.channel_id
+            print "channel idle", self.pid, self.channel_id
             self.alive= False
             return
 
@@ -342,14 +342,14 @@ class Worker(Process):
          job.update([("status", "processing")])
          self.store.update([(job.get("id"), job)])
 
-         print "processing job (%s): %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
+         print "processing job: %s,  %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
 
          method= FunctionType(loads(job.get("code")), globals(), job.get("name"))
          result= method(job.get("args"))
          job.update([("result", result), ("status", "ready")])
          self.store.update([(job.get("id"), job)])
 
-         print "completed job (%s): %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
+         print "completed job: %s, %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
       except Exception, e:
 
          (filename, linenumber, functionname, statement)= extract_tb(exc_info()[2])[-1]
@@ -429,9 +429,10 @@ class Node(object):
             print 'stopped tracking channel', channel_id
             streams.pop(channel_id)
 
+
    def process(self):
 
-      print "started", self.max_processes
+      print "max workers per stream", self.max_processes
 
       channels= self.impq.get_channels()
       streams= dict([(channel_id, (self.impq.get_stream(channel_id), self.impq.get_store(channel_id))) for channel_id in channels.keys()])
@@ -441,17 +442,23 @@ class Node(object):
          self.update_streams(channels, streams)
 
          # stop tracking dead workers
-         for (channel_id, worker) in self.workers.items():
+         for (pid, worker) in self.workers.items():
             if not worker.is_alive():
-               #print "dead", channel_id
-               self.workers.pop(channel_id)
+               print "worker dead", pid, worker.channel_id
+               self.workers.pop(pid)
 
-         #print "creating workers %s/%s/%s" % (len(streams.keys()), len(self.workers), self.max_processes)
          for (channel_id, (stream, store)) in streams.items():
-            if channel_id not in self.workers.keys():
-               worker= Worker(channel_id, stream, store)
-               worker.start()
-               self.workers.update([(channel_id, worker)])
+
+             workers= filter(lambda w: w.channel_id == channel_id, self.workers.values())
+             num_workers=  self.max_processes - len(workers)
+             if num_workers:
+                print "creating %s workers for %s" % (num_workers, channel_id)
+
+             for i in range(1, num_workers + 1):
+                worker= Worker(channel_id, stream, store)
+                worker.start()
+                self.workers.update([(worker.pid, worker)])
+                print "created worker", i, worker.pid, channel_id
 
       self.shutdown()
 
@@ -459,8 +466,8 @@ class Node(object):
 
       # wait for workers to finish before shutting down
       print "shutting down node..."
-      for (channel_id, worker) in self.workers.items():
-         print "waiting for worker", channel_id
+      for (pid, worker) in self.workers.items():
+         print "waiting for worker:", pid, worker.channel_id
          worker.join()
  
       print "node shutdown complete."
