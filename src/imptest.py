@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#-*- coding:utf-8 -*-
 
 from Queue import Empty
 from sys import stdout
@@ -18,7 +19,7 @@ class MyBot(Client):
    @Client.startup
    def start(self):
 
-      for i in range(0, 100):
+      for i in range(0, 10000):
          self.fork(self.pow, args= i)
          sleep(0.25)
 

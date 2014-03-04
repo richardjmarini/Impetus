@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#-*- coding:utf-8 -*-
 
 from copy import deepcopy
 from os import path, makedirs
@@ -11,13 +12,14 @@ from itertools import izip
 from time import sleep
 from Queue import PriorityQueue , Empty
 from marshal import dumps, loads
-from json import dumps as json_dumps
+from json import dumps as json_dumps, JSONEncoder
+from zlib import compress
 from types import FunctionType
 from threading import Thread, Lock, currentThread
-from codecs import open as utf8open
 from traceback import extract_tb
 from socket import error as SocketError
 from atexit import register
+from codecs import open as utf8open
 
 class Autovivification(object):
 
@@ -58,6 +60,13 @@ class Job(dict):
          kwargs["status"]= "waiting"
 
       super(Job, self).__init__(**kwargs)
+
+class JobEncoder(JSONEncoder):
+
+   def default(self, obj):
+      if isinstance(obj, datetime):
+         return str(obj)
+      return JSONEncoder.default(self, obj)
 
 class Queue(object):
 
@@ -183,8 +192,10 @@ class Client(object):
             for job in self.store.values():
                if job.get("status") == "ready":
                   ready.append(job)
+                  self.ready[current_thread.name].write(json_dumps(job, cls= JobEncoder) + "\n")
                elif job.get("status") == "error":
                   errors.append(job)
+                  self.ready[current_thread.name].write(json_dumps(job, cls= JobEncoder) + "\n")
                else:
                   continue
 
