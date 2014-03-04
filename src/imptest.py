@@ -19,7 +19,7 @@ class MyBot(Client):
    @Client.startup
    def start(self):
 
-      for i in range(0, 10000):
+      for i in range(0, 100):
          self.fork(self.pow, args= i)
          sleep(0.25)
 
@@ -41,7 +41,7 @@ class MyBot(Client):
 
 if __name__ == '__main__':
 
-   bot= MyBot("localhost", 50000, "test")
+   bot= MyBot("localhost", 50000, "impetus")
    print "My Id:", bot.id
    bot.run()
 

@@ -2,8 +2,8 @@
 #-*- coding:utf-8 -*-
 
 from copy import deepcopy
-from os import path, makedirs
-from sys import stdout, stderr, exc_info, exit
+from os import path, makedirs, getcwd, fork, chdir, setsid, umask, getpid, dup2, remove, kill, makedirs, pardir, stat, rename, curdir
+from sys import stdin, stdout, stderr, exc_info, exit
 from multiprocessing import Process
 from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
 from uuid import uuid1
@@ -21,6 +21,8 @@ from atexit import register
 from codecs import open as open
 from zlib import compress
 from base64 import b64encode as encode
+from signal import SIGTERM
+
 
 class Autovivification(object):
 
@@ -69,15 +71,254 @@ class JobEncoder(JSONEncoder):
          return str(obj)
       return JSONEncoder.default(self, obj)
 
+class Daemon(object):
+   '''
+   Damonizes base object
+   '''
+
+   def __init__(self, pidfile, stdin= "/dev/null", stdout= "/dev/null", stderr= "/dev/null"):
+      '''
+      Initializes daemon
+      '''
+      self.stdin= stdin
+      self.stdout= stdout
+      self.stderr= stderr
+      self.pidfile= pidfile
+      super(Daemon, self).__init__()
+
+   def fork(self):
+      '''
+      Forks off the the process into the background
+      '''
+      try:
+         pid= fork()
+         if pid > 0:
+            exit(0)
+      except OSError, e:
+         exit(1)
+
+   def daemonize(self):
+      '''
+      Forks then sets up the I/O stream for the daemon 
+      '''
+      self.fork()
+
+      chdir(getcwd())
+      setsid()
+      umask(0)
+  
+      self.fork()
+      stdout.flush()
+      stderr.flush()
+
+      si= file(self.stdin, 'w+')
+      so= file(self.stdout, 'a+')
+      se= file(self.stderr, 'a+', 0)
+
+      dup2(si.fileno(), stdin.fileno())
+      dup2(so.fileno(), stdout.fileno())
+      dup2(se.fileno(), stderr.fileno())
+
+      register(self.delPID)
+      self.setPID()
+
+   def setPID(self):
+      '''
+      Creates PID file for the current daemon on the filesystem
+      '''
+      pid= str(getpid())
+      fh= open(self.pidfile, 'w')
+      fh.write(pid)
+      fh.close()
+
+   def delPID(self):
+      '''
+       Removes the PID file from the filesystem
+      '''
+      remove(self.pidfile)
+
+   def getPID(self):
+      '''
+      Reads the PID from the filesystem
+      '''
+      try:
+          pid= int(open(self.pidfile, 'r').read())
+      except IOError, e:
+          pid= None
+
+      return pid
+
+   def start(self):
+      '''
+      Startup the daemon process
+      '''
+      pid= self.getPID()
+      if pid:
+         exit(1)
+
+      self.daemonize()
+      self.run()
+
+   def stop(self):
+      '''
+      Stops the daemon process
+      '''
+      pid= self.getPID()
+      if not pid:
+         return
+
+      try:
+         kill(pid, SIGTERM)
+         sleep(0.1)
+         self.delPID()
+      except OSError, e:
+         if str(e).find('No such process') > 0:
+            if path.exists(self.pidfile):
+               self.delPID()
+         else:
+            exit(1)
+
+   def restart(self):
+      '''
+      Restarts the daemon process
+      '''
+      self.stop()
+      self.start()
+
+   def run(self):
+      '''
+      Overridden in base class
+      '''
+      pass
+
+   '''
+   Damonizes base object
+   '''
+
+   def __init__(self, pidfile, stdin= "/dev/null", stdout= "/dev/null", stderr= "/dev/null"):
+      '''
+      Initializes daemon
+      '''
+      self.stdin= stdin
+      self.stdout= stdout
+      self.stderr= stderr
+      self.pidfile= pidfile
+      super(Daemon, self).__init__()
+
+   def fork(self):
+      '''
+      Forks off the the process into the background
+      '''
+      try:
+         pid= fork()
+         if pid > 0:
+            exit(0)
+      except OSError, e:
+         exit(1)
+
+   def daemonize(self):
+      '''
+      Forks then sets up the I/O stream for the daemon 
+      '''
+      self.fork()
+
+      chdir(getcwd())
+      setsid()
+      umask(0)
+  
+      self.fork()
+      stdout.flush()
+      stderr.flush()
+
+      si= file(self.stdin, 'w+')
+      so= file(self.stdout, 'a+')
+      se= file(self.stderr, 'a+', 0)
+
+      dup2(si.fileno(), stdin.fileno())
+      dup2(so.fileno(), stdout.fileno())
+      dup2(se.fileno(), stderr.fileno())
+
+      register(self.delPID)
+      self.setPID()
+
+   def setPID(self):
+      '''
+      Creates PID file for the current daemon on the filesystem
+      '''
+      pid= str(getpid())
+      fh= open(self.pidfile, 'w')
+      fh.write(pid)
+      fh.close()
+
+   def delPID(self):
+      '''
+       Removes the PID file from the filesystem
+      '''
+      remove(self.pidfile)
+
+   def getPID(self):
+      '''
+      Reads the PID from the filesystem
+      '''
+      try:
+          pid= int(open(self.pidfile, 'r').read())
+      except IOError, e:
+          pid= None
+
+      return pid
+
+   def start(self):
+      '''
+      Startup the daemon process
+      '''
+      pid= self.getPID()
+      if pid:
+         exit(1)
+
+      self.daemonize()
+      self.run()
+
+   def stop(self):
+      '''
+      Stops the daemon process
+      '''
+      pid= self.getPID()
+      if not pid:
+         return
+
+      try:
+         kill(pid, SIGTERM)
+         sleep(0.1)
+         self.delPID()
+      except OSError, e:
+         if str(e).find('No such process') > 0:
+            if path.exists(self.pidfile):
+               self.delPID()
+         else:
+            exit(1)
+
+   def restart(self):
+      '''
+      Restarts the daemon process
+      '''
+      self.stop()
+      self.start()
+
+   def run(self):
+      '''
+      Overridden in base class
+      '''
+      pass
+
 class Queue(object):
 
-   def __init__(self, host, port, security_key):
+   def __init__(self, address, authkey):
 
       super(Queue, self).__init__()
 
       self.streams= {}
-
-      self.manager= SyncManager(address= (host, int(port)), authkey= security_key)
+      self.address= address
+      self.manager= SyncManager(address= self.address, authkey= authkey)
       self.manager.register("create_stream", callable= self.create_stream)
       self.manager.register("delete_stream", callable= self.delete_stream)
       self.manager.register("get_streams", callable=  lambda: self.streams, proxytype= DictProxy)
@@ -110,18 +351,17 @@ class Client(object):
 
    statuses= ("forked", "processed")
 
-   def __init__(self, host, port, security_key, id= None, task_dir= "tasks"):
+   def __init__(self, host, port, authkey, id= None, taskdir= "tasks"):
 
       self.id= id if id else str(uuid1())
-      self.task_dir= path.join(task_dir, self.id)
+      self.taskdir= path.join(taskdir, self.id)
 
-      self.impq= SyncManager(address= (host, port), authkey= security_key)
+      self.impq= SyncManager(address= (host, port), authkey= authkey)
       self.impq.register("get_streams")
       self.impq.register("create_stream")
       self.impq.register("delete_stream")
       self.impq.register("get_store")
       self.impq.register("get_queue")
-      self.impq.register("jobs")
       self.impq.connect()
 
       self.jobs= []
@@ -138,7 +378,7 @@ class Client(object):
 
 
       try:
-         makedirs(self.task_dir)
+         makedirs(self.taskdir)
       except:
          pass
 
@@ -290,8 +530,8 @@ class Client(object):
 
       
       thread= Thread(target= method, name= name, args= (self, ))
-      self.errors[name]= open(path.join(self.task_dir, '.'.join((name, "err"))), 'ab+')
-      self.ready[name]=  open(path.join(self.task_dir, '.'.join((name, "ok"))), 'ab+')
+      self.errors[name]= open(path.join(self.taskdir, '.'.join((name, "err"))), 'ab+')
+      self.ready[name]=  open(path.join(self.taskdir, '.'.join((name, "ok"))), 'ab+')
 
       return thread
  
@@ -389,20 +629,26 @@ class Worker(Process):
          sleep(0.01)
 
 
-class Node(object):
+class Node(Daemon):
 
-   def __init__(self, host, port, security_key, max_processes= 5):
+   def __init__(self, address, authkey, mpps= 5, piddir= curdir, logdir= curdir):
 
-      self.host= host
-      self.port= port
-      self.security_key= security_key
-      self.max_processes= max_processes
+      self.address= address
+      self.authkey= authkey
+      self.mpps= mpps
 
       self.workers= {}
       self.alive= True
 
       register(self.shutdown)
       self.connect()
+  
+      super(Node, self).__init__(
+         pidfile= path.join(piddir, self.__class__.__name__ + ".pid"),
+         stdout= path.join(logdir, self.__class__.__name__ + ".out"),
+         stderr= path.join(logdir, self.__class__.__name__ + ".err"),
+         stdin= path.join(logdir, self.__class__.__name__ + ".in")
+      )
 
    def connect(self):
 
@@ -410,8 +656,17 @@ class Node(object):
       # BaseProxy class has thread local storage which caches the connection
       # which is reused for future connections causing "borken pipe" errors on 
       # creating new manager.  
-      if (self.host, int(self.port)) in BaseProxy._address_to_local:
-         del BaseProxy._address_to_local[(self.host, int(self.port))][0].connection
+      if self.address in BaseProxy._address_to_local:
+         del BaseProxy._address_to_local[self.address][0].connection
+
+   def connect(self):
+
+      # remove connection from cache:
+      # BaseProxy class has thread local storage which caches the connection
+      # which is reused for future connections causing "borken pipe" errors on 
+      # creating new manager.  
+      if self.address in BaseProxy._address_to_local:
+         del BaseProxy._address_to_local[self.address][0].connection
 
       # register handlers
       SyncManager.register("get_streams")
@@ -421,7 +676,7 @@ class Node(object):
       while self.alive:
 
          try:
-            self.impq= SyncManager(address= (self.host, int(self.port)), authkey= self.security_key)
+            self.impq= SyncManager(address= self.address, authkey= self.authkey)
             self.impq.connect() 
             break
          except (EOFError, IOError, SocketError) as e:
@@ -430,7 +685,7 @@ class Node(object):
 
    def process(self):
 
-      print "max workers per queue", self.max_processes
+      print "max processes per stream", self.mpps
 
       # get list of streams proxies
       streams= self.impq.get_streams()
@@ -449,26 +704,31 @@ class Node(object):
             if stream_id not in streams.keys():
                print 'stopped tracking stream', stream_id
                queues.pop(stream_id)
+         #print "number of streams", len(queues)
 
          # stop tracking workers which are no longer active
          for (pid, worker) in self.workers.items():
             if not worker.is_alive():
                print "worker dead", pid, worker.stream_id
                self.workers.pop(pid)
+         #print "number of workers:", len(self.workers)
 
          # create workers for queues we are current tracking
+         number_of_jobs= 0
          for (stream_id, (queue, store)) in queues.items():
 
+            qsize= queue.qsize()
+            number_of_jobs+= qsize
             stream_workers= filter(lambda w: w.stream_id == stream_id, self.workers.values())
-            num_stream_workers=  self.max_processes - len(stream_workers)
+            num_stream_workers=  min(qsize, self.mpps - len(stream_workers))
             if num_stream_workers:
                print "creating %s workers for %s" % (num_stream_workers, stream_id)
-
             for i in range(1, num_stream_workers + 1):
                worker= Worker(stream_id, queue, store)
                worker.start()
                self.workers.update([(worker.pid, worker)])
                print "created worker", i, worker.pid, stream_id
+         #print "number of jobs:", number_of_jobs
 
       self.shutdown()
 
@@ -494,5 +754,5 @@ class Node(object):
 
 
 if __name__ == "__main__":
-   q= Queue("localhost", 50000, "test")
+   q= Queue(("localhost", 50000), "impetus")
    q.run()
