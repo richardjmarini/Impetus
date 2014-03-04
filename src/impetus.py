@@ -655,14 +655,13 @@ class Status(dict):
 
       kwargs["timestamp"]= kwargs.get("timestamp", datetime.utcnow())
       kwargs["streams"]= kwargs.get("streams", 0)
-      kwargs["idle"]= kwargs.get("idle", 0)
-      kwargs["busy"]= kwargs.get("busy", 0)
+      kwargs["active"]= kwargs.get("active", 0)
       kwargs["jobs"]= kwargs.get("jobs", 0)
       kwargs["mpps"]= kwargs.get("mpps", 0)
 
       super(Status, self).__init__(**kwargs)
 
-      self["capacity"]= self["mpps"] * self["streams"]
+      self["required"]= self["mpps"] * self["streams"]
 
 
 class Node(Daemon):
@@ -786,14 +785,13 @@ class Node(Daemon):
                print "created worker", i, worker.pid, stream_id
 
          status= Status(
-            idle= len(filter(lambda worker: worker.status == "idle", self.workers.values())),
-            busy= len(filter(lambda worker: worker.status == "busy", self.workers.values())),
+            active= len(self.workers),
             streams= len(queues),
             jobs= sum([queue.qsize() for (stream_id, (queue, store)) in queues.items()]),
             mpps= self.mpps
          )
-         print status
-         sleep(0.025)
+         print "Status:", status
+         sleep(1)
 
       self.shutdown()
 
@@ -815,7 +813,7 @@ class Node(Daemon):
          except Exception, e:
             print >> stderr, "node communication error", str(e)
             self.connect()
-         sleep(0.025)
+         sleep(1)
 
 
 class DFS(Daemon):
