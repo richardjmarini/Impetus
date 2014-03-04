@@ -416,49 +416,47 @@ class Node(object):
             print "could not connect ...trying again", str(e)
             sleep(1)
 
-   def update_queues(self, streams, queues):
-
-      # update list of queues to track
-      for stream_id in streams.keys():
-         if stream_id not in queues.keys():
-            print "tracking stream", stream_id
-            queues.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id)))])
-          
-      for stream_id in queues.keys():
-         if stream_id not in streams.keys():
-            print 'stopped tracking stream', stream_id
-            queues.pop(stream_id)
-
-
    def process(self):
 
       print "max workers per queue", self.max_processes
 
+      # get list of streams proxies
       streams= self.impq.get_streams()
       queues= dict([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id))) for stream_id in streams.keys()])
 
       while self.alive:
 
-         self.update_queues(streams, queues)
+         # get list of new streams we are not current tracking
+         for stream_id in streams.keys():
+            if stream_id not in queues.keys():
+               print "tracking stream", stream_id
+               queues.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id)))])
 
-         # stop tracking dead workers
+         # stop tracking streams which are no longer active
+         for stream_id in queues.keys():
+            if stream_id not in streams.keys():
+               print 'stopped tracking stream', stream_id
+               queues.pop(stream_id)
+
+         # stop tracking workers which are no longer active
          for (pid, worker) in self.workers.items():
             if not worker.is_alive():
                print "worker dead", pid, worker.stream_id
                self.workers.pop(pid)
 
+         # create workers for queues we are current tracking
          for (stream_id, (queue, store)) in queues.items():
 
-             workers= filter(lambda w: w.stream_id == stream_id, self.workers.values())
-             num_workers=  self.max_processes - len(workers)
-             if num_workers:
-                print "creating %s workers for %s" % (num_workers, stream_id)
+            stream_workers= filter(lambda w: w.stream_id == stream_id, self.workers.values())
+            num_stream_workers=  self.max_processes - len(stream_workers)
+            if num_stream_workers:
+               print "creating %s workers for %s" % (num_stream_workers, stream_id)
 
-             for i in range(1, num_workers + 1):
-                worker= Worker(stream_id, queue, store)
-                worker.start()
-                self.workers.update([(worker.pid, worker)])
-                print "created worker", i, worker.pid, stream_id
+            for i in range(1, num_stream_workers + 1):
+               worker= Worker(stream_id, queue, store)
+               worker.start()
+               self.workers.update([(worker.pid, worker)])
+               print "created worker", i, worker.pid, stream_id
 
       self.shutdown()
 
