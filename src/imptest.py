@@ -3,7 +3,7 @@
 
 from Queue import Empty
 from sys import stdout
-from impq import Client
+from impetus import Client
 from time import sleep
 
 class MyBot(Client):

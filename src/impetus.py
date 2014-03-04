@@ -310,11 +310,9 @@ class Daemon(object):
       '''
       pass
 
-class Queue(object):
+class Queue(Daemon):
 
-   def __init__(self, address, authkey):
-
-      super(Queue, self).__init__()
+   def __init__(self, address, authkey, logdir= curdir, piddir= curdir):
 
       self.streams= {}
       self.address= address
@@ -324,6 +322,13 @@ class Queue(object):
       self.manager.register("get_streams", callable=  lambda: self.streams, proxytype= DictProxy)
       self.manager.register("get_store", callable=  lambda stream_id: self.streams[stream_id].store, proxytype= DictProxy)
       self.manager.register("get_queue", callable=  lambda stream_id: self.streams[stream_id].queue, proxytype= PriorityQueue)
+
+      super(Queue, self).__init__(
+         pidfile= path.join(piddir, self.__class__.__name__ + ".pid"),
+         stdout= path.join(logdir, self.__class__.__name__ + ".out"),
+         stderr= path.join(logdir, self.__class__.__name__ + ".err"),
+         stdin= path.join(logdir, self.__class__.__name__ + ".in")
+      )
 
    def create_stream(self, **properties):
 
@@ -631,7 +636,7 @@ class Worker(Process):
 
 class Node(Daemon):
 
-   def __init__(self, address, authkey, mpps= 5, piddir= curdir, logdir= curdir):
+   def __init__(self, address, authkey, mpps= 5, logdir= curdir, piddir= curdir):
 
       self.address= address
       self.authkey= authkey
@@ -752,7 +757,3 @@ class Node(Daemon):
             self.connect()
          sleep(0.01)
 
-
-if __name__ == "__main__":
-   q= Queue(("localhost", 50000), "impetus")
-   q.run()
