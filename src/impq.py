@@ -34,14 +34,14 @@ class Autovivification(object):
          else:
             setattr(self, pname, pvalue)
 
-class Channel(object):
+class Stream(object):
  
    def __init__(self, **properties):
 
-      super(Channel, self).__init__()
+      super(Stream, self).__init__()
 
       self.properties= properties
-      self.stream= PriorityQueue()
+      self.queue= PriorityQueue()
       self.store= {}
 
 class Job(dict):
@@ -65,28 +65,28 @@ class Queue(object):
 
       super(Queue, self).__init__()
 
-      self.channels= {}
+      self.streams= {}
 
       self.manager= SyncManager(address= (host, int(port)), authkey= security_key)
-      self.manager.register("create_channel", callable= self.create_channel)
-      self.manager.register("delete_channel", callable= self.delete_channel)
-      self.manager.register("get_channels", callable=  lambda: self.channels, proxytype= DictProxy)
-      self.manager.register("get_store", callable=  lambda channel_id: self.channels[channel_id].store, proxytype= DictProxy)
-      self.manager.register("get_stream", callable=  lambda channel_id: self.channels[channel_id].stream, proxytype= PriorityQueue)
+      self.manager.register("create_stream", callable= self.create_stream)
+      self.manager.register("delete_stream", callable= self.delete_stream)
+      self.manager.register("get_streams", callable=  lambda: self.streams, proxytype= DictProxy)
+      self.manager.register("get_store", callable=  lambda stream_id: self.streams[stream_id].store, proxytype= DictProxy)
+      self.manager.register("get_queue", callable=  lambda stream_id: self.streams[stream_id].queue, proxytype= PriorityQueue)
 
-   def create_channel(self, **properties):
+   def create_stream(self, **properties):
 
-      channel= Channel(**properties)
-      channel_id= properties.get("channel_id")
-      if not channel_id:
-         channel_id= uuid1()
+      stream= Stream(**properties)
+      stream_id= properties.get("stream_id")
+      if not stream_id:
+         stream_id= uuid1()
 
-      self.channels[channel_id]= channel
+      self.streams[stream_id]= stream
 
-   def delete_channel(self, **properties):
+   def delete_stream(self, **properties):
 
-      channel_id= properties.get("channel_id")
-      del self.channels[channel_id]
+      stream_id= properties.get("stream_id")
+      del self.streams[stream_id]
 
    def run(self):
 
@@ -106,18 +106,18 @@ class Client(object):
       self.task_dir= path.join(task_dir, self.id)
 
       self.impq= SyncManager(address= (host, port), authkey= security_key)
-      self.impq.register("get_channels")
-      self.impq.register("create_channel")
-      self.impq.register("delete_channel")
+      self.impq.register("get_streams")
+      self.impq.register("create_stream")
+      self.impq.register("delete_stream")
       self.impq.register("get_store")
-      self.impq.register("get_stream")
+      self.impq.register("get_queue")
       self.impq.register("jobs")
       self.impq.connect()
 
       self.jobs= []
-      self.impq.create_channel(channel_id= self.id)
-      self.store= self.impq.get_store(channel_id= self.id)
-      self.stream= self.impq.get_stream(channel_id= self.id)
+      self.impq.create_stream(stream_id= self.id)
+      self.store= self.impq.get_store(stream_id= self.id)
+      self.queue= self.impq.get_queue(stream_id= self.id)
       self.alive= True
       self._current_thread= None
       self._lock= Lock()
@@ -134,7 +134,7 @@ class Client(object):
 
    def __del__(self):
 
-      self.impq.delete_channel(channel_id= self.id)
+      self.impq.delete_stream(stream_id= self.id)
 
    @staticmethod
    def node(method):
@@ -228,7 +228,7 @@ class Client(object):
          setattr(job, "priority", priority)
 
       self.store.update([(job.get("id"), job)])
-      self.stream.put([(job.get("priority"), job.get("id"))])
+      self.queue.put([(job.get("priority"), job.get("id"))])
   
       #print "forked", len(self.store)
       
@@ -311,28 +311,28 @@ class Worker(Process):
 
    statuses= ("idle", "busy")
 
-   def __init__(self, channel_id, stream, store):
+   def __init__(self, stream_id, queue, store):
 
       super(Worker, self).__init__()
 
       self.alive= True
       self.status= "idle"
-      self.channel_id= channel_id
-      self.stream= stream
+      self.stream_id= stream_id
+      self.queue= queue
       self.store= store
 
    def process(self):
 
       try:
 
-         print "processing channel", self.pid, self.channel_id
+         print "processing stream", self.pid, self.stream_id
          job_id= None
          job= {}
 
          try:
-            (priority, job_id)= self.stream.get(block= True, timeout= 30).pop()
+            (priority, job_id)= self.queue.get(block= True, timeout= 30).pop()
          except Empty:
-            print "channel idle", self.pid, self.channel_id
+            print "stream idle", self.pid, self.stream_id
             self.alive= False
             return
 
@@ -370,7 +370,7 @@ class Worker(Process):
          try:
             self.process()
          except (UnboundLocalError, EOFError, IOError, SocketError) as e:
-            print >> stderr, "worker communication error:", self.channel_id, str(e)
+            print >> stderr, "worker communication error:", self.stream_id, str(e)
             self.status= "idle"
             self.alive=  False
 
@@ -402,8 +402,8 @@ class Node(object):
          del BaseProxy._address_to_local[(self.host, int(self.port))][0].connection
 
       # register handlers
-      SyncManager.register("get_channels")
-      SyncManager.register("get_stream")
+      SyncManager.register("get_streams")
+      SyncManager.register("get_queue")
       SyncManager.register("get_store")
 
       while self.alive:
@@ -416,49 +416,49 @@ class Node(object):
             print "could not connect ...trying again", str(e)
             sleep(1)
 
-   def update_streams(self, channels, streams):
+   def update_queues(self, streams, queues):
 
-      # update list of streams to track
-      for channel_id in channels.keys():
-         if channel_id not in streams.keys():
-            print "tracking channel", channel_id
-            streams.update([(channel_id, (self.impq.get_stream(channel_id), self.impq.get_store(channel_id)))])
+      # update list of queues to track
+      for stream_id in streams.keys():
+         if stream_id not in queues.keys():
+            print "tracking stream", stream_id
+            queues.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id)))])
           
-      for channel_id in streams.keys():
-         if channel_id not in channels.keys():
-            print 'stopped tracking channel', channel_id
-            streams.pop(channel_id)
+      for stream_id in queues.keys():
+         if stream_id not in streams.keys():
+            print 'stopped tracking stream', stream_id
+            queues.pop(stream_id)
 
 
    def process(self):
 
-      print "max workers per stream", self.max_processes
+      print "max workers per queue", self.max_processes
 
-      channels= self.impq.get_channels()
-      streams= dict([(channel_id, (self.impq.get_stream(channel_id), self.impq.get_store(channel_id))) for channel_id in channels.keys()])
+      streams= self.impq.get_streams()
+      queues= dict([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id))) for stream_id in streams.keys()])
 
       while self.alive:
 
-         self.update_streams(channels, streams)
+         self.update_queues(streams, queues)
 
          # stop tracking dead workers
          for (pid, worker) in self.workers.items():
             if not worker.is_alive():
-               print "worker dead", pid, worker.channel_id
+               print "worker dead", pid, worker.stream_id
                self.workers.pop(pid)
 
-         for (channel_id, (stream, store)) in streams.items():
+         for (stream_id, (queue, store)) in queues.items():
 
-             workers= filter(lambda w: w.channel_id == channel_id, self.workers.values())
+             workers= filter(lambda w: w.stream_id == stream_id, self.workers.values())
              num_workers=  self.max_processes - len(workers)
              if num_workers:
-                print "creating %s workers for %s" % (num_workers, channel_id)
+                print "creating %s workers for %s" % (num_workers, stream_id)
 
              for i in range(1, num_workers + 1):
-                worker= Worker(channel_id, stream, store)
+                worker= Worker(stream_id, queue, store)
                 worker.start()
                 self.workers.update([(worker.pid, worker)])
-                print "created worker", i, worker.pid, channel_id
+                print "created worker", i, worker.pid, stream_id
 
       self.shutdown()
 
@@ -467,7 +467,7 @@ class Node(object):
       # wait for workers to finish before shutting down
       print "shutting down node..."
       for (pid, worker) in self.workers.items():
-         print "waiting for worker:", pid, worker.channel_id
+         print "waiting for worker:", pid, worker.stream_id
          worker.join()
  
       print "node shutdown complete."
