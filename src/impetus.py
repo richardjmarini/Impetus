@@ -356,12 +356,13 @@ class Client(object):
 
    statuses= ("forked", "processed")
 
-   def __init__(self, host, port, authkey, id= None, taskdir= "tasks"):
+   def __init__(self, address, authkey, taskdir= "tasks", id= None):
 
       self.id= id if id else str(uuid1())
+      self.address= address
       self.taskdir= path.join(taskdir, self.id)
 
-      self.impq= SyncManager(address= (host, port), authkey= authkey)
+      self.impq= SyncManager(address= self.address, authkey= authkey)
       self.impq.register("get_streams")
       self.impq.register("create_stream")
       self.impq.register("delete_stream")
