@@ -33,8 +33,11 @@ def parse_args(argv):
    opt_parser= OptionParser()
    [ opt_parser.add_option(opt) for opt in [
       make_option("-q", "--queue", default= "localhost", help= "host of queue instance"),
-      make_option("-p", "--port", default= 50000, type= int, help= "port of queue instance"),
-      make_option("-a", "--authkey", default= "impetus", help= "authorization key for queue instance"),
+      make_option("-p", "--qport", default= 50000, type= int, help= "port of queue instance"),
+      make_option("-a", "--qauthkey", default= "impetus", help= "authorization key for queue instance"),
+      make_option("-d", "--dfs", default= None, help= "host of dfs instance"),
+      make_option("-o", "--dport", default= 50001, type= int, help= "port of queue instance"),
+      make_option("-u", "--dauthkey", default= "impetus", help= "authorization key for queue instance"),
       make_option("-i", "--piddir", default= path.join(pardir, "pid"), help= "pid file directory"),
       make_option("-l", "--logdir", default= path.join(pardir, "log"), help= "log file directory"),
       make_option("-m", "--mpps", default= 5, type= int, help= "max number of processes per stream")
@@ -53,7 +56,7 @@ if __name__ == "__main__":
 
    args, opts, usage= parse_args(argv)
 
-   node= Node((opts.queue, opts.port), opts.authkey, opts.mpps, opts.logdir, opts.piddir)
+   node= Node((opts.queue, opts.qport), opts.qauthkey, opts.mpps, (opts.dfs, opts.dport), opts.dauthkey, opts.logdir, opts.piddir)
 
    if "start" in args:
       print "starting node in daemon mode"

@@ -38,6 +38,7 @@ class Helloworld(Client):
 
    @Client.node
    def pow(i):
+      
       return i * i
 
    @Client.startup
@@ -45,7 +46,7 @@ class Helloworld(Client):
 
       for i in range(0, 100):
          self.fork(self.pow, args= i)
-         sleep(0.25)
+         sleep(0.025)
 
    @Client.process
    def stage1(self, ready, errors):
@@ -53,7 +54,7 @@ class Helloworld(Client):
       total= 0
       for job in ready:
          total+= job.get('result')
-         sleep(0.24)
+         sleep(0.025)
  
       print "Total:", total
       print "Errors:", len(errors)

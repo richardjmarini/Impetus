@@ -39,8 +39,8 @@ from traceback import extract_tb
 from socket import error as SocketError
 from atexit import register
 from codecs import open as open
-from zlib import compress
-from base64 import b64encode as encode
+from zlib import compress, decompress
+from base64 import b64encode as encode, b64decode as decode
 from signal import SIGTERM
 
 
@@ -73,14 +73,9 @@ class Job(dict):
 
    def __init__(self, **kwargs):
 
-      if not kwargs.get("id"):
-         kwargs["id"]= str(uuid1())
-
-      if not kwargs.get("created"):
-         kwargs["created"]= datetime.utcnow()
-
-      if not kwargs.get("status"):
-         kwargs["status"]= "waiting"
+      kwargs["id"]= kwargs.get("id", str(uuid1()))
+      kwargs["created"]= kwargs.get("created", datetime.utcnow())
+      kwargs["status"]= kwargs.get("status", "waiting")
 
       super(Job, self).__init__(**kwargs)
 
@@ -339,9 +334,9 @@ class Queue(Daemon):
       self.manager= SyncManager(address= self.address, authkey= authkey)
       self.manager.register("create_stream", callable= self.create_stream)
       self.manager.register("delete_stream", callable= self.delete_stream)
-      self.manager.register("get_streams", callable=  lambda: self.streams, proxytype= DictProxy)
-      self.manager.register("get_store", callable=  lambda stream_id: self.streams[stream_id].store, proxytype= DictProxy)
-      self.manager.register("get_queue", callable=  lambda stream_id: self.streams[stream_id].queue, proxytype= PriorityQueue)
+      self.manager.register("get_streams", callable= lambda: self.streams, proxytype= DictProxy)
+      self.manager.register("get_store", callable= lambda stream_id: self.streams[stream_id].store, proxytype= DictProxy)
+      self.manager.register("get_queue", callable= lambda stream_id: self.streams[stream_id].queue, proxytype= PriorityQueue)
 
       super(Queue, self).__init__(
          pidfile= path.join(piddir, self.__class__.__name__ + ".pid"),
@@ -495,7 +490,7 @@ class Client(object):
       job= Job(
          client= self.id,
          name= method.func_name,
-         code= mdumps(method.func_code),
+         code= encode(compress(mdumps(method.func_code))),
          args= args,
          callback= callback.func_name if callback else current_thread.next_thread.name,
          result= None,
@@ -557,7 +552,7 @@ class Client(object):
       
       thread= Thread(target= method, name= name, args= (self, ))
       self.errors[name]= open(path.join(self.taskdir, '.'.join((name, "err"))), 'ab+')
-      self.ready[name]=  open(path.join(self.taskdir, '.'.join((name, "ok"))), 'ab+')
+      self.ready[name]= open(path.join(self.taskdir, '.'.join((name, "ok"))), 'ab+')
 
       return thread
  
@@ -622,7 +617,7 @@ class Worker(Process):
 
          print "processing job: %s,  %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
 
-         method= FunctionType(mloads(job.get("code")), globals(), job.get("name"))
+         method= FunctionType(mloads(decompress(decode(job.get("code")))), globals(), job.get("name"))
          result= method(job.get("args"))
          job.update([("result", result), ("status", "ready")])
          self.store.update([(job.get("id"), job)])
@@ -650,23 +645,41 @@ class Worker(Process):
          except (UnboundLocalError, EOFError, IOError, SocketError) as e:
             print >> stderr, "worker communication error:", self.stream_id, str(e)
             self.status= "idle"
-            self.alive=  False
+            self.alive= False
 
          sleep(0.01)
+
+class Status(dict):
+
+   def __init__(self, **kwargs):
+
+      kwargs["timestamp"]= kwargs.get("timestamp", datetime.utcnow())
+      kwargs["streams"]= kwargs.get("streams", 0)
+      kwargs["idle"]= kwargs.get("idle", 0)
+      kwargs["busy"]= kwargs.get("busy", 0)
+      kwargs["jobs"]= kwargs.get("jobs", 0)
+      kwargs["mpps"]= kwargs.get("mpps", 0)
+
+      super(Status, self).__init__(**kwargs)
+
+      self["capacity"]= self["mpps"] * self["streams"]
 
 
 class Node(Daemon):
 
-   def __init__(self, address, authkey, mpps= 5, logdir= curdir, piddir= curdir):
+   def __init__(self, queue, qauthkey, mpps= 5, dfs= None, dauthkey= None, logdir= curdir, piddir= curdir):
 
-      self.address= address
-      self.authkey= authkey
+      self.queue= queue
+      self.qauthkey= qauthkey
       self.mpps= mpps
+      self.dfs= dfs
+      self.dauthkey= dauthkey
 
       self.workers= {}
       self.alive= True
 
       register(self.shutdown)
+
       self.connect()
   
       super(Node, self).__init__(
@@ -678,32 +691,53 @@ class Node(Daemon):
 
    def connect(self):
 
-      # remove connection from cache:
-      # BaseProxy class has thread local storage which caches the connection
-      # which is reused for future connections causing "borken pipe" errors on 
-      # creating new manager.  
-      if self.address in BaseProxy._address_to_local:
-         del BaseProxy._address_to_local[self.address][0].connection
+      self.qconnect()
+      if None not in self.dfs:
+         self.dconnect()
 
-   def connect(self):
+   def qconnect(self):
 
       # remove connection from cache:
       # BaseProxy class has thread local storage which caches the connection
       # which is reused for future connections causing "borken pipe" errors on 
       # creating new manager.  
-      if self.address in BaseProxy._address_to_local:
-         del BaseProxy._address_to_local[self.address][0].connection
+      if self.queue in BaseProxy._address_to_local:
+         del BaseProxy._address_to_local[self.queue][0].connection
 
       # register handlers
       SyncManager.register("get_streams")
       SyncManager.register("get_queue")
       SyncManager.register("get_store")
 
+      print "connecting to queue", self.queue
       while self.alive:
 
          try:
-            self.impq= SyncManager(address= self.address, authkey= self.authkey)
+            self.impq= SyncManager(address= self.queue, authkey= self.qauthkey)
             self.impq.connect() 
+            break
+         except (EOFError, IOError, SocketError) as e:
+            print "could not connect ...trying again", str(e)
+            sleep(1)
+
+   def dconnect(self):
+
+      # remove connection from cache:
+      # BaseProxy class has thread local storage which caches the connection
+      # which is reused for future connections causing "borken pipe" errors on
+      # creating new manager.
+      if self.dfs in BaseProxy._address_to_local:
+         del BaseProxy._address_to_local[self.dfs][0].connection
+
+      # register handlers
+      SyncManager.register("get_nodes")
+
+      print "connecting to dfs", self.dfs
+      while self.alive:
+
+         try:
+            self.impdfs= SyncManager(address= self.dfs, authkey= self.dauthkey)
+            self.impdfs.connect()
             break
          except (EOFError, IOError, SocketError) as e:
             print "could not connect ...trying again", str(e)
@@ -730,23 +764,19 @@ class Node(Daemon):
             if stream_id not in streams.keys():
                print 'stopped tracking stream', stream_id
                queues.pop(stream_id)
-         #print "number of streams", len(queues)
 
          # stop tracking workers which are no longer active
          for (pid, worker) in self.workers.items():
             if not worker.is_alive():
                print "worker dead", pid, worker.stream_id
                self.workers.pop(pid)
-         #print "number of workers:", len(self.workers)
 
          # create workers for queues we are current tracking
-         number_of_jobs= 0
          for (stream_id, (queue, store)) in queues.items():
 
             qsize= queue.qsize()
-            number_of_jobs+= qsize
             stream_workers= filter(lambda w: w.stream_id == stream_id, self.workers.values())
-            num_stream_workers=  min(qsize, self.mpps - len(stream_workers))
+            num_stream_workers= min(qsize, self.mpps - len(stream_workers))
             if num_stream_workers:
                print "creating %s workers for %s" % (num_stream_workers, stream_id)
             for i in range(1, num_stream_workers + 1):
@@ -754,7 +784,16 @@ class Node(Daemon):
                worker.start()
                self.workers.update([(worker.pid, worker)])
                print "created worker", i, worker.pid, stream_id
-         #print "number of jobs:", number_of_jobs
+
+         status= Status(
+            idle= len(filter(lambda worker: worker.status == "idle", self.workers.values())),
+            busy= len(filter(lambda worker: worker.status == "busy", self.workers.values())),
+            streams= len(queues),
+            jobs= sum([queue.qsize() for (stream_id, (queue, store)) in queues.items()]),
+            mpps= self.mpps
+         )
+         print status
+         sleep(0.025)
 
       self.shutdown()
 
@@ -774,7 +813,54 @@ class Node(Daemon):
          try:
             self.process()
          except Exception, e:
-            print >> stderr, "node communication error:", str(e)
+            print >> stderr, "node communication error", str(e)
             self.connect()
-         sleep(0.01)
+         sleep(0.025)
+
+
+class DFS(Daemon):
+
+   def __init__(self, address, authkey, queue, qauthkey, logdir= curdir, piddir= curdir):
+
+      self.address= address
+      self.authkey= authkey
+
+      self.queue= queue
+      self.qauthkey= qauthkey
+
+      self.alive= True
+      self.nodes= {}
+
+      self.manager= SyncManager(address= self.address, authkey= self.authkey)
+      self.manager.register("get_nodes", callable= lambda: self.nodes, proxytype= DictProxy)
+
+      self.connect()
+
+   def connect(self):
+
+      # remove connection from cache:
+      # BaseProxy class has thread local storage which caches the connection
+      # which is reused for future connections causing "borken pipe" errors on
+      # creating new manager.
+      if self.queue in BaseProxy._address_to_local:
+         del BaseProxy._address_to_local[self.queue][0].connection
+
+      # register handlers
+      SyncManager.register("get_streams")
+
+      while self.alive:
+
+         try:
+            self.impq= SyncManager(address= self.queue, authkey= self.qauthkey)
+            self.impq.connect()
+            break
+         except (EOFError, IOError, SocketError) as e:
+            print "could not connect ...trying again", str(e)
+            sleep(1)
+
+   def run(self):
+
+      server= self.manager.get_server()
+      print "running"
+      server.serve_forever()
 
