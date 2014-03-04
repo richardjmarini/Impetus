@@ -1,5 +1,25 @@
 #!/usr/bin/env python
 #-*- coding:utf-8 -*-
+#---------------------------------------------------------------------------
+# Author: Richard J. Marini (richardjmarini@gmail.com)
+# Date: 2/4/2014
+# Name: Impetus
+# Desciption: Impetus is an auto-scaling distributed processing framework.
+#
+# License:
+#    Impetus is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    any later version.
+#
+#    Impetus is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with Impetus.  If not, see <http://www.gnu.org/licenses/>.
+#---------------------------------------------------------------------------
 
 from copy import deepcopy
 from os import path, makedirs, getcwd, fork, chdir, setsid, umask, getpid, dup2, remove, kill, makedirs, pardir, stat, rename, curdir
