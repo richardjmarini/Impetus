@@ -52,7 +52,7 @@ Options:
 ###DFS
 impetus.DFS is a Dynamic Frequency Scaling daemon (Auto-Scale) which monitors active streams and is responsible for starting up some number of instances (such as AWS EC2 instances) determined by analytic methods (eg, taking into consideration the number of active streams, number of waiting jobs in those streams, how many existing Nodes are currently active, etc..). DFS is responsible for bootstraping these instances. Bootstrapping is a configurable process which consists of at a minimum starting up impetusnode but can also include instally necessary security/deploy keys pulling the lastest version of the Impetus system and/or installing any required packages.
 
-**Note: the DFS component is still being developed. For a functional exmaple see an earlier version of the framework in a seperate github project here: https://github.com/richardjmarini/Impetus1/blob/master/src/dfs.py
+*Note: the DFS component is still being developed. For a functional exmaple see an earlier version of the framework in a seperate github project here: https://github.com/richardjmarini/Impetus1/blob/master/src/dfs.py*
 
 ```
 Usage: impetusdfs.py start|stop|restart|foreground
@@ -77,7 +77,7 @@ Options:
 ```
 
 ###Client
-impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method.  Jobs are created from the forked methods which are marshalled into python bytecode and associated with various properties (eg, arguments for the method, state information, Job identifieries, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..)
+impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method.  Jobs are created from the forked methods which are marshalled into python bytecode and associated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..)
 
 Here is a "helloworld" example of using the Client API:
 ```
@@ -153,7 +153,7 @@ eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmag
 >>> loads(decompress(b64decode("eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmagWEF+uTpIHmQqAxMACdINGA==")))
 <code object pow at 0x7f683b86c230, file "./helloworld.py", line 39>
 ```
-
+*Note:  Currently, the "transport" of the context information between Client, Queue and Node happens via an in memory data store within the Queue. The orignal version had a concept of "transports" which allowed the transport of context information to occur either via the in memory data store, filesystem or an s3bucket. The orginal version also allowed the option of using Memcache as the in memory data store.  I have not yet currently impliemented these concepts in this newer version.  Mainly, because I never used them and didn't see a need for them.  The original version can be found here: https://github.com/richardjmarini/Impetus1.git*
 
 
 Example Node output in foreground mode:
