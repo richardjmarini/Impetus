@@ -182,3 +182,23 @@ $ ls -ltr ../log/Node*
 -rw-rw-rw- 1 rmarini rmarini 22623 Mar  4 13:37 ../log/Node.out
 ```
 
+###Other Notes:
+I've attemped to build a simular framework using Celerey.  I was able to dynamically "fork" methods in the same manner by setting up the tasks.py file like this:
+
+```
+from marshal import loads
+from celery import Celery
+from types import FunctionType
+
+app= Celery('tasks', broker= 'amqp://guest@localhost//', backend= 'amqp')
+
+@app.task
+def task(name, code, args):
+
+   handler= FunctionType(loads(code), globals(), name)
+   results= handler(args)
+
+   return results
+```
+
+The context information could the be written to an external data-store such as redis or memcache.  However, there are other features such as, multiple streams which would be akin to having multiple Celery() instances, Client controlled worker spawn frequency, and methods for implementing auto-scaling which frustrated me -- but that just may be my own issue ;-)
