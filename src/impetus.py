@@ -59,11 +59,12 @@ class Autovivification(object):
          else:
             setattr(self, pname, pvalue)
 
-class Stream(object):
+class Stream(object): # Autovivification):
  
    def __init__(self, **properties):
 
       super(Stream, self).__init__()
+      #super(Stream, self).__init__(**properties)
 
       self.properties= properties
       self.queue= PriorityQueue()
@@ -76,6 +77,7 @@ class Job(dict):
       kwargs["id"]= kwargs.get("id", str(uuid1()))
       kwargs["created"]= kwargs.get("created", datetime.utcnow())
       kwargs["status"]= kwargs.get("status", "waiting")
+      kwargs["delay"]= kwargs.get("delay", 0)
 
       super(Job, self).__init__(**kwargs)
 
@@ -337,6 +339,7 @@ class Queue(Daemon):
       self.manager.register("get_streams", callable= lambda: self.streams, proxytype= DictProxy)
       self.manager.register("get_store", callable= lambda stream_id: self.streams[stream_id].store, proxytype= DictProxy)
       self.manager.register("get_queue", callable= lambda stream_id: self.streams[stream_id].queue, proxytype= PriorityQueue)
+      self.manager.register("get_properties", callable= lambda stream_id: self.streams[stream_id].properties, proxytype= DictProxy)
 
       super(Queue, self).__init__(
          pidfile= path.join(piddir, self.__class__.__name__ + ".pid"),
@@ -388,7 +391,7 @@ class Client(object):
 
    statuses= ("forked", "processed")
 
-   def __init__(self, address, authkey, taskdir= "tasks", id= None):
+   def __init__(self, address, authkey, taskdir= "tasks", id= None, **properties):
 
       self.id= id if id else str(uuid1())
       self.address= address
@@ -403,7 +406,7 @@ class Client(object):
       self.impq.connect()
 
       self.jobs= []
-      self.impq.create_stream(stream_id= self.id)
+      self.impq.create_stream(stream_id= self.id, **properties)
       self.store= self.impq.get_store(stream_id= self.id)
       self.queue= self.impq.get_queue(stream_id= self.id)
       self.alive= True
@@ -500,7 +503,7 @@ class Client(object):
        
       return _process
 
-   def fork(self, method, args, callback= None, priority= None, job_id= None):
+   def fork(self, method, args, callback= None, priority= None, job_id= None, **properties):
 
       current_thread= currentThread()
       
@@ -511,7 +514,8 @@ class Client(object):
          args= args,
          callback= callback.func_name if callback else current_thread.next_thread.name,
          result= None,
-         transport= None
+         transport= None,
+         **properties
       )
       
       if priority:
@@ -601,7 +605,7 @@ class Worker(Process):
 
    statuses= ("idle", "busy")
 
-   def __init__(self, stream_id, queue, store):
+   def __init__(self, stream_id, queue, store, properties):
 
       super(Worker, self).__init__()
 
@@ -610,19 +614,20 @@ class Worker(Process):
       self.stream_id= stream_id
       self.queue= queue
       self.store= store
+      self.properties= properties
 
    def process(self):
 
       try:
 
-         print "processing stream", self.pid, self.stream_id
+         #print "processing stream", self.pid, self.stream_id
          job_id= None
          job= {}
 
          try:
-            (priority, job_id)= self.queue.get(block= True, timeout= 30).pop()
+            (priority, job_id)= self.queue.get(block= True, timeout= 15).pop()
          except Empty:
-            print "stream idle", self.pid, self.stream_id
+            #print "stream idle", self.pid, self.stream_id
             self.alive= False
             return
 
@@ -634,6 +639,7 @@ class Worker(Process):
 
          print "processing job: %s,  %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
 
+         sleep(job.get("delay"))
          method= FunctionType(mloads(decompress(decode(job.get("code")))), globals(), job.get("name"))
          result= method(job.get("args"))
          job.update([("result", result), ("status", "ready")])
@@ -664,7 +670,7 @@ class Worker(Process):
             self.status= "idle"
             self.alive= False
 
-         sleep(0.01)
+         sleep(self.properties.get("frequency", 0.01))
 
 class Status(dict):
 
@@ -724,6 +730,7 @@ class Node(Daemon):
       SyncManager.register("get_streams")
       SyncManager.register("get_queue")
       SyncManager.register("get_store")
+      SyncManager.register("get_properties")
 
       print "connecting to queue", self.queue
       while self.alive:
@@ -752,8 +759,8 @@ class Node(Daemon):
       while self.alive:
 
          try:
-            self.impdfs= SyncManager(address= self.dfs, authkey= self.dauthkey)
-            self.impdfs.connect()
+            self.impd= SyncManager(address= self.dfs, authkey= self.dauthkey)
+            self.impd.connect()
             break
          except (EOFError, IOError, SocketError) as e:
             print "could not connect ...trying again", str(e)
@@ -765,7 +772,7 @@ class Node(Daemon):
 
       # get list of streams proxies
       streams= self.impq.get_streams()
-      queues= dict([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id))) for stream_id in streams.keys()])
+      queues= dict([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id))) for stream_id in streams.keys()])
 
       while self.alive:
 
@@ -773,7 +780,7 @@ class Node(Daemon):
          for stream_id in streams.keys():
             if stream_id not in queues.keys():
                print "tracking stream", stream_id
-               queues.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id)))])
+               queues.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id)))])
 
          # stop tracking streams which are no longer active
          for stream_id in queues.keys():
@@ -784,11 +791,11 @@ class Node(Daemon):
          # stop tracking workers which are no longer active
          for (pid, worker) in self.workers.items():
             if not worker.is_alive():
-               print "worker dead", pid, worker.stream_id
+               #print "worker dead", pid, worker.stream_id
                self.workers.pop(pid)
 
          # create workers for queues we are current tracking
-         for (stream_id, (queue, store)) in queues.items():
+         for (stream_id, (queue, store, properties)) in queues.items():
 
             qsize= queue.qsize()
             stream_workers= filter(lambda w: w.stream_id == stream_id, self.workers.values())
@@ -796,7 +803,7 @@ class Node(Daemon):
             if num_stream_workers:
                print "creating %s workers for %s" % (num_stream_workers, stream_id)
             for i in range(1, num_stream_workers + 1):
-               worker= Worker(stream_id, queue, store)
+               worker= Worker(stream_id, queue, store, properties)
                worker.start()
                self.workers.update([(worker.pid, worker)])
                print "created worker", i, worker.pid, stream_id
@@ -804,10 +811,11 @@ class Node(Daemon):
          status= Status(
             active= len(self.workers),
             streams= len(queues),
-            jobs= sum([queue.qsize() for (stream_id, (queue, store)) in queues.items()]),
+            jobs= sum([queue.qsize() for (stream_id, (queue, store, properties)) in queues.items()]),
+            store= sum([len(store) for (stream_id, (queue, store, properties)) in queues.items()]),
             mpps= self.mpps
          )
-         print "Status:", status
+         #print "Status:", status
          sleep(1)
 
       self.shutdown()

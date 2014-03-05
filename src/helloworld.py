@@ -43,7 +43,7 @@ class Helloworld(Client):
    @Client.startup
    def start(self):
 
-      for i in range(0, 1000):
+      for i in range(0, 100):
          self.fork(self.pow, args= i)
          sleep(0.025)
 
