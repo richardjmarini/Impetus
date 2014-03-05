@@ -1,7 +1,7 @@
 #Impetus
 
 ##Auto-Scaling Asynchronous Distributed Processing Framework
-impetus is an auto-scaling asynchronous distributed processing framework orginally designed for the purpose of building a distributed cralwer with machine learning analytics.  The Impetus Framework is the auto-scaling asynchronous distributed processing sub-system of that distributed crawler. 
+impetus is an auto-scaling asynchronous distributed processing framework orginally designed for the purpose of building a distributed cralwer with machine learning analytics.  The Impetus Framework is the auto-scaling asynchronous distributed processing sub-system of that distributed crawler.  This is the second version of the sub-system.  The orginal version still exists here: https://github.com/richardjmarini/Impetus1.git
 
 ###Queue
 
