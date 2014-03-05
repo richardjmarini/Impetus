@@ -141,6 +141,14 @@ If an error occours "result" will be the following error structure:
 
 {"error": str(e), "name": functionname, "linenumber": linenumber, "statement": statement}
 
+The forked method is also stored within the structure as a base64encoded ziplib compresed python bye code:
+eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmagWEF+uTpIHmQqAxMACdINGA==
+
+>>> from base64 import b64decode
+>>> from zlib import uncompress
+>>> from marshal import loads
+>>> loads(decompress(b64decode("eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmagWEF+uTpIHmQqAxMACdINGA==")))
+<code object pow at 0x7f683b86c230, file "./helloworld.py", line 39>
 ```
 
 
