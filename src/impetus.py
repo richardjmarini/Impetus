@@ -625,7 +625,7 @@ class Worker(Process):
          job= {}
 
          try:
-            (priority, job_id)= self.queue.get(block= True, timeout= 15).pop()
+            (priority, job_id)= self.queue.get(block= True, timeout= self.properties.get("timeout", 15)).pop()
          except Empty:
             #print "stream idle", self.pid, self.stream_id
             self.alive= False
