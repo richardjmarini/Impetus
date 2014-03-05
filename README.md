@@ -52,6 +52,8 @@ Options:
 ###DFS
 impetus.DFS is a Dynamic Frequency Scaling daemon (Auto-Scale) which monitors active streams and is responsible for starting up some number of instances (such as AWS EC2 instances) determined by analytic methods (eg, taking into consideration the number of active streams, number of waiting jobs in those streams, how many existing Nodes are currently active, etc..). DFS is responsible for bootstraping these instances. Bootstrapping is a configurable process which consists of at a minimum starting up impetusnode but can also include instally necessary security/deploy keys pulling the lastest version of the Impetus system and/or installing any required packages.
 
+**Note: the DFS component is still being developed. For a functional exmaple see an earlier version of the framework in a seperate github project here: https://github.com/richardjmarini/Impetus1/blob/master/src/dfs.py
+
 ```
 Usage: impetusdfs.py start|stop|restart|foreground
 
@@ -71,6 +73,7 @@ Options:
                         pid file directory
   -l LOGDIR, --logdir=LOGDIR
                         log file directory
+
 ```
 
 ###Client
