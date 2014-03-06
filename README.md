@@ -5,7 +5,7 @@ impetus is an auto-scaling asynchronous distributed processing framework orginal
 
 ###Queue
 
-impetus.Queue is a centralized context manager for the Impetus Framework.  Client applications connect to the queue via exposed methods that allow them to create processing streams.  A stream consists of a distributed Priority Queue, Data Store and associated Properties.
+impetus.Queue is a centralized context manager for the Impetus Framework.  Client applications connect to the queue via the Client API which consists of a series of remote methods that allow the Client API to create processing streams. An application can create one or more streams.  Each stream has a unique identifier.  If an identifier is not provided by the Client a unique identifier is created. The same stream can be used by one or more applications.  Each stream can be asigned various meta-data properties that describe the stream.  These meta-data properties are used by DFS (the dynamic frequency scaler) to aassist in intelligent auto-scaling. A stream contains both a Priority Queue and a Key-Val data store. 
 
 ```
 Usage: impetusqueue.py start|stop|restart|foreground
@@ -24,7 +24,8 @@ Options:
 ```
 
 ###Node
-impetus.Node is a multi-processing management daemon that tracks active Streams and spawns Worker processes that are responsible for executing Jobs within the Stream they are assigned to process.  The frequency at which the management daemon spawns new Worker processes is configurable property of the Stream which can be set by the "Client" when creating the "Stream". The number of Worker processes that can be spwaned per Stream is a configurable property of the Node called "mpps" (maximum processes per stream) and can be set during startup via DFS (the Dynamic Frequency Scaler). When a Stream goes idle, a configurable timeout propertiy of the Stream, Node will stop tracking the Stream.
+
+impetus.Node is a multi-processing management daemon that tracks active Streams and spawns Worker processes that are responsible for executing Jobs within the Stream they are assigned to process.  The frequency at which the management daemon spawns new Worker processes is configurable property that can be set within the meta-data properties of the stream by the "Client" when creating the Stream. The number of Worker processes that can be spwaned per Stream is a configurable property of the Node called "mpps" (maximum processes per stream) and can be set by command line options (or by DFS) when the Node starts up. When a Stream goes idle, a configurable timeout propertiy of the Stream via the streams meta-data properties, Node will stop tracking the Stream.  Nodes can be started up manually via the command line (for by DFS) to track streams with certain meta-data properties.
 
 ```
 Usage: impetusnode.py start|stop|restart|foreground
@@ -47,12 +48,16 @@ Options:
   -l LOGDIR, --logdir=LOGDIR
                         log file directory
   -m MPPS, --mpps=MPPS  max number of processes per stream
+  
+  -s STREAMS, --properties=PROPERTIES
+                        key/value pairs of stream properties, eg
+                        id:<stream_id>,frequency:<stream_frequency>, etc..
 ```
 
 ###DFS
-impetus.DFS is a Dynamic Frequency Scaling daemon (Auto-Scale) which monitors active streams and is responsible for starting up some number of instances (such as AWS EC2 instances) determined by analytic methods (eg, taking into consideration the number of active streams, number of waiting jobs in those streams, how many existing Nodes are currently active, etc..). DFS is responsible for bootstraping these instances. Bootstrapping is a configurable process which consists of at a minimum starting up impetusnode but can also include instally necessary security/deploy keys pulling the lastest version of the Impetus system and/or installing any required packages. 
+impetus.DFS is a Dynamic Frequency Scaling daemon (Auto-Scale) which monitors active streams and is responsible for starting up some number of instances (such as AWS EC2 instances) determined by analytic methods (eg, taking into consideration the number of active streams, number of waiting jobs in those streams, how many existing Nodes are currently active, and the meta-data properties of the streams and existing nodes, etc..). DFS is responsible for bootstraping these instances. Bootstrapping is a configurable process which consists of at a minimum starting up impetusnode but can also include instally necessary security/deploy keys pulling the lastest version of the Impetus system and/or installing any required packages. 
 
-*Note: the DFS component is still being developed. For a functional exmaple see an earlier version of the framework in a seperate github project here: https://github.com/richardjmarini/Impetus1/blob/master/src/dfs.py  I've also used this version to bootstrap nodes with Selenium and Vritual Frame Buffer (Xvfb) to run headless selenium so crawling via selenium can be achived for sites which hide links under asynchronous javascript calls, etc..* 
+*Note: the DFS component is still being developed. For a functional example, which does not support scaling via meta-data properties, can be seen in an earlier version of the framework in a seperate github project here: https://github.com/richardjmarini/Impetus1/blob/master/src/dfs.py  I've also used this version to bootstrap nodes with Selenium and Vritual Frame Buffer (Xvfb) to run headless selenium so crawling via selenium can be achived for sites which hide links under asynchronous javascript calls, etc..* 
 
 ```
 Usage: impetusdfs.py start|stop|restart|foreground
@@ -77,9 +82,9 @@ Options:
 ```
 
 ###Client
-impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method.  Jobs are created from the forked methods which are marshalled into python bytecode and associated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..)
+impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method. Jobs are created from the forked methods which are marshalled into python bytecode and associated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..).  Each instance of Client has it's own stream. If multiple streams are needed by a single application then Client should be used in a composition pattern.
 
-Here is a "helloworld" example of using the Client API:
+Here is a "helloworld" example of using the Client API using inheritance:
 ```
 class Helloworld(Client):
 
