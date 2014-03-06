@@ -170,7 +170,15 @@ class Helloworld(Client):
       print "shutting down"
 ```
 
-Example helloworld output: 
+How to run a local version (ie, without DFS/auto-scaling) of the Helloworld example: 
+
+```
+$ ./impetusqueue.py start
+$ ./impetusnode.py start
+$ ./helloword.py
+```
+
+Example helloworld output:
 ```
 My Id: b8b81d16-a47c-11e3-8b68-3ca9f46675e0
 thread: start 0/0 -> stage1 0/0 via stage1
@@ -210,7 +218,17 @@ eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmag
 *Note:  Currently, the "transport" of the context information between Client, Queue and Node happens via an in memory data store within the Queue. The orignal version had a concept of "transports" which allowed the transport of context information to occur either via the in memory data store, filesystem or an s3bucket. The orginal version also allowed the option of using Memcache as the in memory data store.  I have not yet currently impliemented these concepts in this newer version.  Mainly, because I never used them and didn't see a need for them.  The original version can be found here: https://github.com/richardjmarini/Impetus1.git*
 
 
-Example Node output in foreground mode:
+Example Node output:
+
+*Node logs all activity in Daemon mode:*
+```
+$ ls -ltr ../log/Node*
+-rw-rw-rw- 1 rmarini rmarini     0 Mar  4 13:35 ../log/Node.in
+-rw-rw-rw- 1 rmarini rmarini    27 Mar  4 13:37 ../log/Node.err
+-rw-rw-rw- 1 rmarini rmarini 22623 Mar  4 13:37 ../log/Node.out
+```
+
+*In foreground mode Node prints to stdout/stderr:*
 ```
 connecting to queue ('localhost', 50000)
 starting node in foreground mode
@@ -228,13 +246,6 @@ etc...
 stopped tracking stream b8b81d16-a47c-11e3-8b68-3ca9f46675e0
 ```
 
-Node also logs all activity in Daemon mode: 
-```
-$ ls -ltr ../log/Node*
--rw-rw-rw- 1 rmarini rmarini     0 Mar  4 13:35 ../log/Node.in
--rw-rw-rw- 1 rmarini rmarini    27 Mar  4 13:37 ../log/Node.err
--rw-rw-rw- 1 rmarini rmarini 22623 Mar  4 13:37 ../log/Node.out
-```
 ###To do:
 1. Finish DFS.
 2. Create a logging daemon:  Currently all print statements are sent to stdout/stderr when the components are run in foreground mode.  When the components are run in background mode print statements are sent to their corresponding log files instead of stdout/stderr. I would like to have the Daemon (izer) class re-route those output streams to a centralized logger vs retro-fitting each classes to use a logging method.
