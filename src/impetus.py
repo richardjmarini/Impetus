@@ -59,12 +59,16 @@ class Autovivification(object):
          else:
             setattr(self, pname, pvalue)
 
-class Stream(object): # Autovivification):
+class Stream(Autovivification):
  
    def __init__(self, **properties):
 
-      super(Stream, self).__init__()
-      #super(Stream, self).__init__(**properties)
+      id= properties.get("id")
+      if not id:
+         id= uuid1()
+         properties["id"]= id
+
+      super(Stream, self).__init__(**properties)
 
       self.properties= properties
       self.queue= PriorityQueue()
@@ -337,9 +341,9 @@ class Queue(Daemon):
       self.manager.register("create_stream", callable= self.create_stream)
       self.manager.register("delete_stream", callable= self.delete_stream)
       self.manager.register("get_streams", callable= lambda: self.streams, proxytype= DictProxy)
-      self.manager.register("get_store", callable= lambda stream_id: self.streams[stream_id].store, proxytype= DictProxy)
-      self.manager.register("get_queue", callable= lambda stream_id: self.streams[stream_id].queue, proxytype= PriorityQueue)
-      self.manager.register("get_properties", callable= lambda stream_id: self.streams[stream_id].properties, proxytype= DictProxy)
+      self.manager.register("get_store", callable= lambda id: self.streams[id].store, proxytype= DictProxy)
+      self.manager.register("get_queue", callable= lambda id: self.streams[id].queue, proxytype= PriorityQueue)
+      self.manager.register("get_properties", callable= lambda id: self.streams[id].properties, proxytype= DictProxy)
 
       super(Queue, self).__init__(
          pidfile= path.join(piddir, self.__class__.__name__ + ".pid"),
@@ -367,16 +371,13 @@ class Queue(Daemon):
    def create_stream(self, **properties):
 
       stream= Stream(**properties)
-      stream_id= properties.get("stream_id")
-      if not stream_id:
-         stream_id= uuid1()
 
-      self.streams[stream_id]= stream
+      self.streams[stream.id]= stream
 
    def delete_stream(self, **properties):
 
-      stream_id= properties.get("stream_id")
-      del self.streams[stream_id]
+      id= properties.get("id")
+      del self.streams[id]
 
    def run(self):
 
@@ -406,9 +407,9 @@ class Client(object):
       self.impq.connect()
 
       self.jobs= []
-      self.impq.create_stream(stream_id= self.id, **properties)
-      self.store= self.impq.get_store(stream_id= self.id)
-      self.queue= self.impq.get_queue(stream_id= self.id)
+      self.impq.create_stream(id= self.id, **properties)
+      self.store= self.impq.get_store(id= self.id)
+      self.queue= self.impq.get_queue(id= self.id)
       self.alive= True
       self._current_thread= None
       self._lock= Lock()
@@ -425,7 +426,7 @@ class Client(object):
 
    def __del__(self):
 
-      self.impq.delete_stream(stream_id= self.id)
+      self.impq.delete_stream(id= self.id)
 
    @staticmethod
    def node(method):
@@ -689,13 +690,14 @@ class Status(dict):
 
 class Node(Daemon):
 
-   def __init__(self, queue, qauthkey, mpps= 5, dfs= None, dauthkey= None, logdir= curdir, piddir= curdir):
+   def __init__(self, queue, qauthkey, mpps= 5, dfs= None, dauthkey= None, logdir= curdir, piddir= curdir, **properties):
 
       self.queue= queue
       self.qauthkey= qauthkey
       self.mpps= mpps
       self.dfs= dfs
       self.dauthkey= dauthkey
+      self.properties= properties
 
       self.workers= {}
       self.alive= True
@@ -772,21 +774,31 @@ class Node(Daemon):
 
       # get list of streams proxies
       streams= self.impq.get_streams()
-      queues= dict([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id))) for stream_id in streams.keys()])
+      streams_tracking= {} 
 
       while self.alive:
 
-         # get list of new streams we are not current tracking
-         for stream_id in streams.keys():
-            if stream_id not in queues.keys():
-               print "tracking stream", stream_id
-               queues.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id)))])
+         # get list of streams to track we are not currently tracking
+         streams_to_track= filter(lambda stream_id: stream_id not in streams_tracking.keys(), streams.keys())
+
+         # if we are only tracking streams with specific properties
+         if len(self.properties):
+
+            # get properties for all the streams we are tracking
+            stream_properties= [dict(self.impq.get_properties(stream_id)) for stream_id in streams_to_track]
+
+            # filter out streams we want to track based on matching subsets of properties
+            streams_to_track= map(lambda sp: sp.get("id"), filter(lambda sp: set(self.properties.items()).issubset(sp.items()), stream_properties))
+         
+         for stream_id in streams_to_track:
+            print "tracking stream", stream_id
+            streams_tracking.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.properties))])
 
          # stop tracking streams which are no longer active
-         for stream_id in queues.keys():
+         for stream_id in streams_tracking.keys():
             if stream_id not in streams.keys():
                print 'stopped tracking stream', stream_id
-               queues.pop(stream_id)
+               streams_tracking.pop(stream_id)
 
          # stop tracking workers which are no longer active
          for (pid, worker) in self.workers.items():
@@ -794,8 +806,8 @@ class Node(Daemon):
                #print "worker dead", pid, worker.stream_id
                self.workers.pop(pid)
 
-         # create workers for queues we are current tracking
-         for (stream_id, (queue, store, properties)) in queues.items():
+         # create workers for streams we are currently tracking
+         for (stream_id, (queue, store, properties)) in streams_tracking.items():
 
             qsize= queue.qsize()
             stream_workers= filter(lambda w: w.stream_id == stream_id, self.workers.values())
@@ -809,10 +821,10 @@ class Node(Daemon):
                print "created worker", i, worker.pid, stream_id
 
          status= Status(
-            active= len(self.workers),
-            streams= len(queues),
-            jobs= sum([queue.qsize() for (stream_id, (queue, store, properties)) in queues.items()]),
-            store= sum([len(store) for (stream_id, (queue, store, properties)) in queues.items()]),
+            number_of_workers= len(self.workers),
+            number_of_streams= len(streams_tracking),
+            queue_size= sum([queue.qsize() for (stream_id, (queue, store, properties)) in streams_tracking.items()]),
+            store_size= sum([len(store) for (stream_id, (queue, store, properties)) in streams_tracking.items()]),
             mpps= self.mpps
          )
          #print "Status:", status
