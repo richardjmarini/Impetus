@@ -34,7 +34,7 @@ class Helloworld(Client):
    def __init__(self, address, authkey, taskdir= curdir, id= None):
 
       self.address= address
-      super(Helloworld, self).__init__(self.address, authkey, taskdir, id)
+      super(Helloworld, self).__init__(self.address, authkey, taskdir, id, site="yelp", frequency= 1)
 
    @Client.node
    def pow(i):

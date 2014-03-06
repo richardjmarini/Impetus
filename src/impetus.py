@@ -788,7 +788,7 @@ class Node(Daemon):
 
             # filter out streams we want to track based on matching subsets of properties
             streams_to_track= map(lambda sp: sp.get("id"), filter(lambda sp: set(self.properties.items()).issubset(sp.items()), stream_properties))
-         
+
          for stream_id in streams_to_track:
             print "tracking stream", stream_id
             streams_tracking.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.properties))])
