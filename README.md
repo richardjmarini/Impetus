@@ -49,7 +49,7 @@ Options:
                         log file directory
   -m MPPS, --mpps=MPPS  max number of processes per stream
   
-  -s STREAMS, --properties=PROPERTIES
+  -s PROPERTIES, --properties=PROPERTIES
                         key/value pairs of stream properties, eg
                         id:<stream_id>,frequency:<stream_frequency>, etc..
 ```
