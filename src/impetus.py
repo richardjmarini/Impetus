@@ -834,12 +834,12 @@ class Node(Daemon):
    def shutdown(self):
 
       # wait for workers to finish before shutting down
-      print "shutting down node..."
+      #print "shutting down node..."
       for (pid, worker) in self.workers.items():
          print "waiting for worker:", pid, worker.stream_id
          worker.join()
  
-      print "node shutdown complete."
+      #print "node shutdown complete."
 
    def run(self):
 
