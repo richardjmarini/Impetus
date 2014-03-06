@@ -23,6 +23,30 @@ Options:
                         log file directory
 ```
 
+The Queue Daemon provides the following exposed methods:
+```
+class Queue(Daemon)
+ |  Method resolution order:
+ |      Queue
+ |      Daemon
+ |      __builtin__.object
+ |  
+ |  Methods defined here:
+ |  
+ |  __init__(self, address, authkey, logdir='.', piddir='.')
+ |  
+ |  create_stream(self, **properties)
+ |  
+ |  delete_stream(self, id)
+ |  
+ |  get_streams(self)
+ |
+ |  get_store(self, id)
+ |
+ |  get_properties(self, id) 
+ |
+```
+
 ###Node
 
 impetus.Node is a multi-processing management daemon that tracks active Streams and spawns Worker processes that are responsible for executing Jobs within the Stream they are assigned to process.  The frequency at which the management daemon spawns new Worker processes is configurable property that can be set within the meta-data properties of the stream by the "Client" when creating the Stream. The number of Worker processes that can be spwaned per Stream is a configurable property of the Node called "mpps" (maximum processes per stream) and can be set by command line options (or by DFS) when the Node starts up. When a Stream goes idle, a configurable timeout propertiy of the Stream via the streams meta-data properties, Node will stop tracking the Stream.  Nodes can be started up manually via the command line (for by DFS) to track streams with certain meta-data properties.
@@ -83,6 +107,31 @@ Options:
 
 ###Client
 impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method. Jobs are created from the forked methods which are marshalled into python bytecode and associated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..).  Each instance of Client has it's own stream. If multiple streams are needed by a single application then Client should be used in a composition pattern.
+
+```
+class Client(__builtin__.object)
+ |  Methods defined here:
+ |  
+ |  __del__(self)
+ |  
+ |  __init__(self, address, authkey, taskdir='tasks', id=None, **properties)
+ |  
+ |  fork(self, target, args, callback=None, priority=None, job_id=None, **properties)
+ |  
+ |  run(self)
+ |  
+ |  ----------------------------------------------------------------------
+ |  Static methods defined here:
+ |  
+ |  node(target)
+ |  
+ |  process(target)
+ |  
+ |  shutdown(target)
+ |  
+ |  startup(target)
+
+```
 
 Here is a "helloworld" example of using the Client API using inheritance:
 ```
