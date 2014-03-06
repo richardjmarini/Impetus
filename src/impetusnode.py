@@ -41,7 +41,7 @@ def parse_args(argv):
       make_option("-i", "--piddir", default= path.join(pardir, "pid"), help= "pid file directory"),
       make_option("-l", "--logdir", default= path.join(pardir, "log"), help= "log file directory"),
       make_option("-m", "--mpps", default= 5, type= int, help= "max number of processes per stream"),
-      make_option("-s", "--streams", default= {}, help= "key/value pairs of stream properties, eg id:<stream_id>,frequency:<stream_frequency>, etc..")
+      make_option("-s", "--properties", default= {}, help= "key/value pairs of stream properties, eg id:<stream_id>,frequency:<stream_frequency>, etc..")
    ]]
 
    opt_parser.set_usage("%%prog %s" % ("|".join(opt_args)))
@@ -51,8 +51,8 @@ def parse_args(argv):
      opt_parser.print_usage()
      exit(-1)
 
-   if opts.streams:
-      setattr(opts, "streams", dict([pair.split(':') for pair in opts.streams.split(',')]))
+   if opts.properties:
+      setattr(opts, "properties", dict([pair.split(':') for pair in opts.properties.split(',')]))
 
    return args, opts, opt_parser.print_usage
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
    args, opts, usage= parse_args(argv)
 
-   node= Node((opts.queue, opts.qport), opts.qauthkey, opts.mpps, (opts.dfs, opts.dport), opts.dauthkey, opts.logdir, opts.piddir, **opts.streams)
+   node= Node((opts.queue, opts.qport), opts.qauthkey, opts.mpps, (opts.dfs, opts.dport), opts.dauthkey, opts.logdir, opts.piddir, **opts.properties)
 
    if "start" in args:
       print "starting node in daemon mode"
