@@ -269,4 +269,4 @@ def task(name, code, args):
    return results
 ```
 
-The context information could be written to an external key-store such as redis or memcache.  However, there are other features such as, multiple streams which would be akin to having multiple Celery() instances, Client controlled worker spawn frequency, and methods for implementing auto-scaling which frustrated me -- but that just may be my own issue ;-)
+The context information could be written to an external key-store such as redis or memcache.  However, there are other features such as, multiple streams (which would be akin to having multiple Celery() instances), Client controlled execution rates and auto-scaling based on various properties which frustrated me when trying to use Celery and various other packages -- but that just may be my own issue ;-)
