@@ -236,8 +236,8 @@ $ ls -ltr ../log/Node*
 -rw-rw-rw- 1 rmarini rmarini 22623 Mar  4 13:37 ../log/Node.out
 ```
 ###To do:
-1) Finish DFS. 
-2) Create a logging daemon:  Currently all print statements are sent to stdout/stderr when the components are run in foreground mode.  When the components are run in background mode print statements are sent to their corresponding log files instead of stdout/stderr. I would like to have the Daemon (izer) class re-route those output streams to a centralized logger vs retro-fitting each classes to use a logging method.  
+1. Finish DFS.
+2. Create a logging daemon:  Currently all print statements are sent to stdout/stderr when the components are run in foreground mode.  When the components are run in background mode print statements are sent to their corresponding log files instead of stdout/stderr. I would like to have the Daemon (izer) class re-route those output streams to a centralized logger vs retro-fitting each classes to use a logging method.
 
 ###Other Notes:
 I've attemped to build a simular framework using Celerey.  I was able to dynamically "fork" methods in the same manner by setting up the tasks.py file like this:
