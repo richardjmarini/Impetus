@@ -374,9 +374,8 @@ class Queue(Daemon):
 
       self.streams[stream.id]= stream
 
-   def delete_stream(self, **properties):
+   def delete_stream(self, id):
 
-      id= properties.get("id")
       del self.streams[id]
 
    def run(self):
@@ -426,19 +425,19 @@ class Client(object):
 
    def __del__(self):
 
-      self.impq.delete_stream(id= self.id)
+      self.impq.delete_stream(self.id)
 
    @staticmethod
-   def node(method):
+   def node(target):
 
-      return method
+      return target
 
    @staticmethod
-   def startup(process):
+   def startup(target):
 
       def _process(self):
 
-         process(self)
+         target(self)
 
       global _thread_order
       _process.order= _thread_order
@@ -446,18 +445,18 @@ class Client(object):
       return _process
 
    @staticmethod
-   def shutdown(shutdown):
+   def shutdown(target):
    
       def _shutdown(self):
 
-         shutdown(self, self.ready, self.errors, self._progress)
+         target(self, self.ready, self.errors, self._progress)
 
       global _thread_order
       _shutdown.order= _thread_order
       return _shutdown
 
    @staticmethod
-   def process(process):
+   def process(target):
 
       def _process(self):
 
@@ -486,7 +485,7 @@ class Client(object):
                self.store.pop(job.get("id"))
 
             if len(ready) or len(errors):
-               process(self, ready, errors)
+               target(self, ready, errors)
 
             self._thread_progress(current_thread.name, "processed", len(ready) + len(errors))
             self._show_progress(current_thread)
@@ -504,14 +503,14 @@ class Client(object):
        
       return _process
 
-   def fork(self, method, args, callback= None, priority= None, job_id= None, **properties):
+   def fork(self, target, args, callback= None, priority= None, job_id= None, **properties):
 
       current_thread= currentThread()
       
       job= Job(
          client= self.id,
-         name= method.func_name,
-         code= encode(compress(mdumps(method.func_code))),
+         name= target.func_name,
+         code= encode(compress(mdumps(target.func_code))),
          args= args,
          callback= callback.func_name if callback else current_thread.next_thread.name,
          result= None,
