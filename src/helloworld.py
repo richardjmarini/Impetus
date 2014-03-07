@@ -31,10 +31,10 @@ from time import sleep
 
 class Helloworld(Client):
 
-   def __init__(self, address, authkey, taskdir= curdir, id= None):
+   def __init__(self, address, authkey, taskdir= curdir, id= None, **properties):
 
       self.address= address
-      super(Helloworld, self).__init__(self.address, authkey, taskdir, id)
+      super(Helloworld, self).__init__(self.address, authkey, taskdir, id, **properties)
 
    @Client.node
    def pow(i):
@@ -73,12 +73,16 @@ def parse_args(argv):
       make_option("-q", "--queue", default= "localhost", help= "host of queue instance"),
       make_option("-p", "--port", default= 50000, type= int, help= "port of queue instance"),
       make_option("-a", "--authkey", default= "impetus", help= "authorization key for queue instance"),
-      make_option("-t", "--taskdir", default= path.join(pardir, "tasks"), help= "task directory")
+      make_option("-t", "--taskdir", default= path.join(pardir, "tasks"), help= "task directory"),
+      make_option("-r", "--properties", default= {}, help= "key/valye pairs of stream properties, eg id:<stream_id>,freuqnecy:<stream_frequency>, etc...")
    ]]
 
    opt_parser.set_usage("%%prog %s" % ("|".join(opt_args)))
 
    opts, args= opt_parser.parse_args()
+
+   if opts.properties:
+      setattr(opts, "properties", dict([pair.split(':') for pair in opts.properties.split(',')]))
 
    return args, opts, opt_parser.print_usage
 
@@ -86,7 +90,7 @@ if __name__ == '__main__':
 
    args, opts, usage= parse_args(argv)
 
-   helloworld= Helloworld((opts.queue, opts.port), opts.authkey, opts.taskdir)
+   helloworld= Helloworld((opts.queue, opts.port), opts.authkey, opts.taskdir, **opts.properties)
 
    print "My Id:", helloworld.id
    helloworld.run()

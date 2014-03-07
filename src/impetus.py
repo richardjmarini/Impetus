@@ -639,7 +639,7 @@ class Worker(Process):
 
          print "processing job: %s,  %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
 
-         sleep(job.get("delay"))
+         sleep(float(job.get("delay", 0.0)))
          method= FunctionType(mloads(decompress(decode(job.get("code")))), globals(), job.get("name"))
          result= method(job.get("args"))
          job.update([("result", result), ("status", "ready")])
@@ -670,7 +670,7 @@ class Worker(Process):
             self.status= "idle"
             self.alive= False
 
-         sleep(self.properties.get("frequency", 0.01))
+         sleep(float(self.properties.get("frequency", 0.01)))
 
 class Status(dict):
 
@@ -787,7 +787,10 @@ class Node(Daemon):
             stream_properties= [dict(self.impq.get_properties(stream_id)) for stream_id in streams_to_track]
 
             # filter out streams we want to track based on matching subsets of properties
-            streams_to_track= map(lambda sp: sp.get("id"), filter(lambda sp: set(self.properties.items()).issubset(sp.items()), stream_properties))
+            if "id" in self.properties:
+               streams_to_track= map(lambda sp: sp.get("id"), filter(lambda sp: set(sp.items()).issubset(self.properties.items()), stream_properties))
+            else:
+               streams_to_track= map(lambda sp: sp.get("id"), filter(lambda sp: set(filter(lambda (property_name, property_value): property_name != 'id', sp.items())).issubset(self.properties.items()), stream_properties))
 
          for stream_id in streams_to_track:
             print "tracking stream", stream_id
