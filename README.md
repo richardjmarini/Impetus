@@ -1,11 +1,11 @@
 #Impetus
 
 ##Auto-Scaling Asynchronous Distributed Processing Framework
-impetus is an auto-scaling asynchronous distributed processing framework orginally designed for the purpose of building a distributed cralwer with machine learning analytics.  The Impetus Framework is the auto-scaling asynchronous distributed processing sub-system of that distributed crawler.  This is the second version of the sub-system.  The orginal version still exists here: https://github.com/richardjmarini/Impetus1.git
+impetus is an auto-scaling asynchronous distributed processing framework originally designed for the purpose of building a distributed crawler with machine learning analytics.  The Impetus Framework is the auto-scaling asynchronous distributed processing sub-system of that distributed crawler.  This is the second version of the sub-system.  The original version still exists here: https://github.com/richardjmarini/Impetus1.git
 
 ###Queue
 
-impetus.Queue is a centralized context manager for the Impetus Framework.  Client applications connect to the queue via the Client API which consists of a series of remote methods that allow the Client API to create processing streams. An application can create one or more streams.  Each stream has a unique identifier.  If an identifier is not provided by the Client a unique identifier is created. The same stream can be used by one or more applications.  Each stream can be asigned various meta-data properties that describe the stream.  These meta-data properties are used by DFS (the dynamic frequency scaler) to aassist in intelligent auto-scaling. A stream contains both a Priority Queue and a Key-Val data store. 
+impetus.Queue is a centralized context manager for the Impetus Framework.  Client applications connect to the queue via the Client API which consists of a series of remote methods that allow the Client API to create processing streams. An application can create one or more streams.  Each stream has a unique identifier.  If an identifier is not provided by the Client a unique identifier is created. The same stream can be used by one or more applications.  Each stream can be assigned various meta-data properties that describe the stream.  These meta-data properties are used by DFS (the dynamic frequency scaler) to assist in intelligent auto-scaling. A stream contains both a Priority Queue and a Key-Val data store. 
 
 ```
 Usage: impetusqueue.py start|stop|restart|foreground
@@ -49,7 +49,7 @@ class Queue(Daemon)
 
 ###Node
 
-impetus.Node is a multi-processing management daemon that tracks active Streams and spawns Worker processes that are responsible for executing Jobs within the Stream they are assigned to process.  The frequency at which the management daemon spawns new Worker processes is configurable property that can be set within the meta-data properties of the stream by the "Client" when creating the Stream. The number of Worker processes that can be spwaned per Stream is a configurable property of the Node called "mpps" (maximum processes per stream) and can be set by command line options (or by DFS) when the Node starts up. When a Stream goes idle, a configurable timeout propertiy of the Stream via the streams meta-data properties, Node will stop tracking the Stream.  Nodes can be started up manually via the command line (for by DFS) to track streams with certain meta-data properties.
+impetus.Node is a multi-processing management daemon that tracks active Streams and spawns Worker processes that are responsible for executing Jobs within the Stream they are assigned to process.  The frequency at which the management daemon spawns new Worker processes is configurable property that can be set within the meta-data properties of the stream by the "Client" when creating the Stream. The number of Worker processes that can be spawned per Stream is a configurable property of the Node called "mpps" (maximum processes per stream) and can be set by command line options (or by DFS) when the Node starts up. When a Stream goes idle, a configurable timeout property of the Stream via the streams meta-data properties, Node will stop tracking the Stream.  Nodes can be started up manually via the command line (for by DFS) to track streams with certain meta-data properties.
 
 ```
 Usage: impetusnode.py start|stop|restart|foreground
@@ -79,9 +79,9 @@ Options:
 ```
 
 ###DFS
-impetus.DFS is a Dynamic Frequency Scaling daemon (Auto-Scale) which monitors active streams and is responsible for starting up some number of instances (such as AWS EC2 instances) determined by analytic methods (eg, taking into consideration the number of active streams, number of waiting jobs in those streams, how many existing Nodes are currently active, and the meta-data properties of the streams and existing nodes, etc..). DFS is responsible for bootstraping these instances. Bootstrapping is a configurable process which consists of at a minimum starting up impetusnode but can also include instally necessary security/deploy keys pulling the lastest version of the Impetus system and/or installing any required packages. 
+impetus.DFS is a Dynamic Frequency Scaling daemon (Auto-Scale) which monitors active streams and is responsible for starting up some number of instances (such as AWS EC2 instances) determined by analytic methods (eg, taking into consideration the number of active streams, number of waiting jobs in those streams, how many existing Nodes are currently active, and the meta-data properties of the streams and existing nodes, etc..). DFS is responsible for bootstrapping these instances. Bootstrapping is a configurable process which consists of at a minimum starting up impetusnode but can also include installing necessary security/deploy keys, pulling the latest version of the Impetus system and/or installing any required packages. 
 
-*Note: the DFS component is still being developed. For a functional example, which does not support scaling via meta-data properties, can be seen in an earlier version of the framework in a seperate github project here: https://github.com/richardjmarini/Impetus1/blob/master/src/dfs.py  I've also used this version to bootstrap nodes with Selenium and Vritual Frame Buffer (Xvfb) to run headless selenium so crawling via selenium can be achived for sites which hide links under asynchronous javascript calls, etc..* 
+*Note: the DFS component is still being developed. For a functional example, which does not support scaling via meta-data properties, can be seen in an earlier version of the framework in a separate github project here: https://github.com/richardjmarini/Impetus1/blob/master/src/dfs.py  I've also used this version to bootstrap nodes with Selenium and Virtual Frame Buffer (Xvfb) to run headless selenium so crawling via selenium can be achieved for sites which hide links under asynchronous javascript calls, etc..* 
 
 ```
 Usage: impetusdfs.py start|stop|restart|foreground
@@ -106,7 +106,7 @@ Options:
 ```
 
 ###Client
-impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method. Jobs are created from the forked methods which are marshalled into python bytecode and associated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..).  Each instance of Client has it's own stream. If multiple streams are needed by a single application then Client should be used in a composition pattern.
+impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method. Jobs are created from the forked methods which are marshalled into python bytecode and assoicated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..).  Each instance of Client has it's own stream. If multiple streams are needed by a single application then Client should be used in a composition pattern.
 
 ```
 class Client(__builtin__.object)
@@ -189,7 +189,7 @@ thread: start 100/0 -> stage1 0/100 via stage1
 shutting down
 ```
 
-The Client API also stored all Job and context information within the tasks directory.  A file is created for each "process" method within the Client application and stores each Job processed by the corresponding method. Each file contains one Job per line.  Each Job is a b64encoded zlib compressed json structions.
+The Client API also stored all Job and context information within the tasks directory.  A file is created for each "process" method within the Client application and stores each Job processed by the corresponding method. Each file contains one Job per line.  Each Job is a b64encoded zlib compressed json structuers.
 ```
 $ ls -l ../tasks/b8b81d16-a47c-11e3-8b68-3ca9f46675e0/
 total 72
@@ -215,7 +215,7 @@ eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmag
 >>> loads(decompress(b64decode("eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmagWEF+uTpIHmQqAxMACdINGA==")))
 <code object pow at 0x7f683b86c230, file "./helloworld.py", line 39>
 ```
-*Note:  Currently, the "transport" of the context information between Client, Queue and Node happens via an in memory data store within the Queue. The orignal version had a concept of "transports" which allowed the transport of context information to occur either via the in memory data store, filesystem or an s3bucket. The orginal version also allowed the option of using Memcache as the in memory data store.  I have not yet currently impliemented these concepts in this newer version.  Mainly, because I never used them and didn't see a need for them.  The original version can be found here: https://github.com/richardjmarini/Impetus1.git*
+*Note:  Currently, the "transport" of the context information between Client, Queue and Node happens via an in memory data store within the Queue. The original version had a concept of "transports" which allowed the transport of context information to occur either via the in memory data store, filesystem or an s3bucket. The original version also allowed the option of using Memcache as the in memory data store.  I have not yet currently implemented these concepts in this newer version.  Mainly, because I never used them and didn't see a need for them.  The original version can be found here: https://github.com/richardjmarini/Impetus1.git*
 
 
 Example Node output:
@@ -251,7 +251,7 @@ stopped tracking stream b8b81d16-a47c-11e3-8b68-3ca9f46675e0
 2. Create a logging daemon:  Currently all print statements are sent to stdout/stderr when the components are run in foreground mode.  When the components are run in background mode print statements are sent to their corresponding log files instead of stdout/stderr. I would like to have the Daemon (izer) class re-route those output streams to a centralized logger vs retro-fitting each classes to use a logging method.
 
 ###Other Notes:
-I've attemped to build a simular framework using Celerey.  I was able to dynamically "fork" methods in the same manner by setting up the tasks.py file like this:
+I've attempted to build a similar framework using Celery.  I was able to dynamically "fork" methods in the same manner by setting up the tasks.py file like this:
 
 ```
 from marshal import loads
@@ -269,4 +269,4 @@ def task(name, code, args):
    return results
 ```
 
-The context information could be written to an external key-store such as redis or memcache.  However, there are other features such as, multiple streams which would be akin to having multiple Celery() instances, Client controlled worker spawn frequency, and methods for implementing auto-scaling which frustrated me -- but that just may be my own issue ;-)
+The context information could be written to an external key-store such as redis or memcache.  However, there are other features such as, multiple streams (which would be akin to having multiple Celery() instances), Client controlled execution rates and auto-scaling based on various properties which frustrated me when trying to use Celery and various other packages -- but that just may be my own issue ;-)
