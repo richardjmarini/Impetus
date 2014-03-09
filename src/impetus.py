@@ -725,7 +725,8 @@ class Node(Daemon):
       # which is reused for future connections causing "borken pipe" errors on 
       # creating new manager.  
       if self.queue in BaseProxy._address_to_local:
-         del BaseProxy._address_to_local[self.queue][0].connection
+         if hasattr(BaseProxy._address_to_local[self.queue][0], 'connection'):
+            del BaseProxy._address_to_local[self.queue][0].connection
 
       # register handlers
       SyncManager.register("get_streams")
@@ -739,6 +740,7 @@ class Node(Daemon):
          try:
             self.impq= SyncManager(address= self.queue, authkey= self.qauthkey)
             self.impq.connect() 
+            print "connected to queue", self.queue
             break
          except (EOFError, IOError, SocketError) as e:
             print "could not connect ...trying again", str(e)
@@ -751,7 +753,8 @@ class Node(Daemon):
       # which is reused for future connections causing "borken pipe" errors on
       # creating new manager.
       if self.dfs in BaseProxy._address_to_local:
-         del BaseProxy._address_to_local[self.dfs][0].connection
+         if hasattr(BaseProxy._address_to_local[self.dfs][0], 'connection'):
+            del BaseProxy._address_to_local[self.dfs][0].connection
 
       # register handlers
       SyncManager.register("get_nodes")
@@ -762,6 +765,7 @@ class Node(Daemon):
          try:
             self.impd= SyncManager(address= self.dfs, authkey= self.dauthkey)
             self.impd.connect()
+            print "connected to dfs", self.dfs
             break
          except (EOFError, IOError, SocketError) as e:
             print "could not connect ...trying again", str(e)
@@ -774,6 +778,9 @@ class Node(Daemon):
       # get list of streams proxies
       streams= self.impq.get_streams()
       streams_tracking= {} 
+
+      if None not in self.dfs:
+         nodes= self.impd.get_nodes()
 
       while self.alive:
 
