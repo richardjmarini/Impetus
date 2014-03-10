@@ -773,6 +773,8 @@ class DFS(Daemon):
          stdin= path.join(logdir, self.__class__.__name__ + ".in")
       )
 
+      self.id= getfqdn()
+
       self.address= address
       self.authkey= authkey
 
@@ -835,6 +837,9 @@ class DFS(Daemon):
          print "Number of Streams:", len(streams_tracking.keys())
          print "Number of Nodes:", len(nodes)
 
+         # TODO: check for startup stitutation
+
+         # cycle through existing nodes and check for shutdown stitution
          for node_id, node in nodes.items():
 
             instance= None
@@ -855,9 +860,16 @@ class DFS(Daemon):
             print node_id, node.get("idletime"), node.get("lastactivity"), idletime,  node.get("uptime"), node.get("streams"), node.get("workers"), idle, end_of_billing_period
 
             if end_of_billing_period and idle:
-               print "dfs shutting down node", node_id
-               # TODO: shutdown instance
-
+               print "dfs shutting down node", node_id, self.id
+               
+               if self.id == node_id:
+                  print "shutting down local node", node_id, node.get("pid")
+                  nodes.pop(node_id)
+                  kill(int(node.get("pid")), SIGTERM)
+                  # TODO: perhaps have node catch SIGTERM for clean shutdown
+               else:
+                  print "shutting down remote node", node_id
+                  # TODO: shutdown instance via boto
 
          # stop tracking streams which are no longer active
          for stream_id in streams_tracking.keys():
