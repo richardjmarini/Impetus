@@ -22,7 +22,7 @@
 #---------------------------------------------------------------------------
 
 from copy import deepcopy
-from os import path, makedirs, getcwd, fork, chdir, setsid, umask, getpid, dup2, remove, kill, makedirs, pardir, stat, rename, curdir
+from os import path, makedirs, getcwd, fork, chdir, setsid, umask, getpid, dup2, remove, kill, makedirs, pardir, stat, rename, curdir, getppid
 from sys import stdin, stdout, stderr, exc_info, exit
 from multiprocessing import Process, Value
 from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
@@ -41,7 +41,7 @@ from atexit import register
 from codecs import open as open
 from zlib import compress, decompress
 from base64 import b64encode as encode, b64decode as decode
-from signal import signal, SIGINT, SIGTERM
+from signal import signal, SIGINT, SIGTERM, SIG_IGN
 
 
 class Autovivification(object):
@@ -470,21 +470,24 @@ class Worker(Process):
 
    statuses= ("idle", "busy")
 
-   def __init__(self, stream_id, queue, store, properties):
+   def __init__(self, id, stream_id, queue, store, properties):
 
       super(Worker, self).__init__()
 
+      self.id= id
       self.alive= True
       self.stream_id= stream_id
       self.queue= queue
       self.store= store
       self.properties= properties
 
+
    def process(self):
 
+      sig= None
       try:
 
-         #print "processing stream", self.pid, self.stream_id
+         #print "processing stream", self.pid, self.stream_id, getppid()
          job_id= None
          job= {}
 
@@ -495,8 +498,10 @@ class Worker(Process):
             self.alive= False
             return
 
+         sig= signal(SIGINT, SIG_IGN)
+
          job= self.store.get(job_id)
-         job.update([("status", "processing")])
+         job.update([("status", "processing"), ("node", self.id), ("worker", getpid())])
          self.store.update([(job.get("id"), job)])
 
          print "processing job: %s,  %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
@@ -508,16 +513,22 @@ class Worker(Process):
          self.store.update([(job.get("id"), job)])
 
          print "completed job: %s, %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
+
       except Exception, e:
+
+         sig= signal(SIGINT, SIG_IGN)
 
          (filename, linenumber, functionname, statement)= extract_tb(exc_info()[2])[-1]
          result= {"error": str(e), "name": functionname, "linenumber": linenumber, "statement": statement}
-
+  
          job= self.store.get(job_id)
          print >> stderr, "error processing job:", self.pid, job.get("id"), job.get("name"), job.get("status"), str(e), functionname, linenumber, statement
 
          job.update([("result", result), ("status", "error")])
          self.store.update([(job.get("id"), job)])
+  
+      if sig:
+         sig= signal(SIGINT, sig)
 
    def run(self):
 
@@ -679,7 +690,7 @@ class Node(Daemon):
             if num_stream_workers:
                print "creating %s workers for %s" % (num_stream_workers, stream_id)
             for i in range(1, num_stream_workers + 1):
-               worker= Worker(stream_id, queue, store, properties)
+               worker= Worker(self.id, stream_id, queue, store, properties)
                worker.start()
                self.workers.update([(worker.pid, worker)])
                print "created worker", i, worker.pid, stream_id
