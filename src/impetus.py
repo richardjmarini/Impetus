@@ -707,9 +707,12 @@ class Node(Daemon):
             mpps= self.mpps,
             streams= len(streams_tracking),
             workers= len(self.workers),
+            starttime= self.start_time,
             uptime= datetime.utcnow() - self.start_time,
+            lastactivity= idle_time,
             idletime= datetime.utcnow() - idle_time,
-            properties= self.properties
+            properties= self.properties,
+            pid= getpid()
          )
 
          if hasattr(self, 'impd'):
@@ -756,6 +759,10 @@ class Node(Daemon):
 
 
 class DFS(Daemon):
+
+   billing_period= 3000
+   idle_time= 300
+   seconds_per_day= 86400
 
    def __init__(self, address, authkey, queue, qauthkey, logdir= curdir, piddir= curdir):
 
@@ -806,6 +813,7 @@ class DFS(Daemon):
             print "could not connect ...trying again", str(e)
             sleep(1)
 
+
    def monitor(self):
 
       nodes= self.manager.get_nodes()
@@ -821,14 +829,35 @@ class DFS(Daemon):
                streams_tracking.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id)))])
 
          print "----------------------------------------"
-         print "Number of Nodes:", len(nodes)
          print "Number of Workers:", sum([node.get("workers") for node in nodes.values()])
-         print "Number of Streams:", len(streams_tracking.keys())
          print "Number of Jobs:", sum([queue.qsize() for (queue, store, properties) in streams_tracking.values()])
          print "Number Store Items:", sum([len(store) for (queue, store, properties) in streams_tracking.values()])
+         print "Number of Streams:", len(streams_tracking.keys())
+         print "Number of Nodes:", len(nodes)
 
          for node_id, node in nodes.items():
-            print "\t",  node_id, node
+
+            instance= None
+            """
+               # if we've been up for an hr (-10 minutes) then shutdown before new billing cycle
+               (reservation, )= self.ec2Conn.get_all_instances(filters= {'private_dns_name': node_id})
+               (instance, )= reservation.instances
+            """
+
+            # calculate our time stamps
+            uptime= datetime.utcnow() - (datetime.strptime(instance.launch_time, '%Y-%m-%dT%H:%M:%S.000Z') if instance else node.get("starttime"))
+            idletime= datetime.utcnow() - node.get("lastactivity")
+
+            # calculate our flags
+            end_of_billing_period= (uptime.days * self.seconds_per_day) + uptime.seconds >= self.billing_period
+            idle= (idletime.days * self.seconds_per_day) + idletime.seconds >= self.idle_time
+
+            print node_id, node.get("idletime"), node.get("lastactivity"), idletime,  node.get("uptime"), node.get("streams"), node.get("workers"), idle, end_of_billing_period
+
+            if end_of_billing_period and idle:
+               print "dfs shutting down node", node_id
+               # TODO: shutdown instance
+
 
          # stop tracking streams which are no longer active
          for stream_id in streams_tracking.keys():

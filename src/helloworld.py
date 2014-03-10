@@ -38,7 +38,7 @@ class Helloworld(Client):
 
    @Client.node
    def pow(i):
-      sleep(4)
+      
       return i * i
 
    @Client.startup
