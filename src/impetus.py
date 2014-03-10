@@ -739,7 +739,7 @@ class DFS(Daemon):
       self.queue= queue
       self.qauthkey= qauthkey
 
-      self.nodes= {}
+      self.nodes= dict()
       self.alive= True
 
       self.manager= SyncManager(address= self.address, authkey= self.authkey)
@@ -758,6 +758,9 @@ class DFS(Daemon):
 
       # register handlers
       SyncManager.register("get_streams")
+      SyncManager.register("get_queue")
+      SyncManager.register("get_store")
+      SyncManager.register("get_properties")
 
       while self.alive:
 
@@ -771,10 +774,30 @@ class DFS(Daemon):
 
    def monitor(self):
 
+      nodes= self.manager.get_nodes()
       streams= self.impq.get_streams()
+      streams_tracking= {}
 
       while self.alive: 
-         print "status", len(self.nodes) # , len(streams), sum([stream.queue.size() for (stream_id, stream) in streams])
+
+         streams_to_track= filter(lambda stream_id: stream_id not in streams_tracking.keys(), streams.keys())
+
+         for stream_id in streams_to_track:
+            if stream_id not in streams_tracking:
+               streams_tracking.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id)))])
+
+         print "----------------------------------------"
+         print "Number of Nodes:", len(nodes)
+         print "Number of Workers:", sum([node.get("workers") for node in nodes.values()])
+         print "Number of Streams:", len(streams_tracking.keys())
+         print "Number of Jobs:", sum([queue.qsize() for (queue, store, properties) in streams_tracking.values()])
+         print "Number Store Items:", sum([len(store) for (queue, store, properties) in streams_tracking.values()])
+
+         # stop tracking streams which are no longer active
+         for stream_id in streams_tracking.keys():
+            if stream_id not in streams.keys():
+               streams_tracking.pop(stream_id)
+
          sleep(1)
 
    def startup(self):
