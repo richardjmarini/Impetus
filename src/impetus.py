@@ -556,8 +556,6 @@ class Node(Daemon):
       self.alive= True
       self.start_time= datetime.utcnow()
 
-      register(self.shutdown)
-
       self.connect()
   
       super(Node, self).__init__(
@@ -699,26 +697,38 @@ class Node(Daemon):
 
          sleep(1)
 
-      self.shutdown()
+      self.stop()
 
-   def shutdown(self):
+   def stop(self):
 
       # wait for workers to finish before shutting down
-      #print "shutting down node..."
+      print "shutting down node..."
+      self.alive= False
       for (pid, worker) in self.workers.items():
          print "waiting for worker:", pid, worker.stream_id
          worker.join()
+
+      # if reporting to DFS 
+      # track nodes via shared dict else maintain local dict
+      if hasattr(self, 'impd'):
+         print "de-registering nodes with dfs"
+         nodes= self.impd.get_nodes()
+         del nodes[self.id]
  
-      #print "node shutdown complete."
+      print "node shutdown complete."
+      super(Node, self).stop()
 
    def run(self):
 
       while self.alive:
          try:
             self.process()
-         except Exception, e:
-            print >> stderr, "node communication error", str(e)
-            self.connect()
+         except (KeyboardInterrupt, Exception) as e:
+            if type(e) == KeyboardInterrupt:
+               self.stop()
+            else:
+               print >> stderr, "node communication error", str(e)
+               self.connect()
          sleep(1)
 
 
