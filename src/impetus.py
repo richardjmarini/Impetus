@@ -626,7 +626,7 @@ class Node(Daemon):
 
    def process(self):
 
-      print "max processes per stream", self.mpps
+      print "processing", self.mpps
 
       # get list of streams proxies
       streams= self.impq.get_streams()
@@ -730,7 +730,7 @@ class Node(Daemon):
             if type(e) == KeyboardInterrupt:
                self.stop()
             else:
-               print >> stderr, "node communication error", str(e)
+               print >> stderr, "queue/dfs communication error", str(e)
                self.connect()
          sleep(1)
 
@@ -775,6 +775,7 @@ class DFS(Daemon):
       SyncManager.register("get_store")
       SyncManager.register("get_properties")
 
+      print "connecting to queue", self.queue
       while self.alive:
 
          try:
@@ -840,6 +841,9 @@ class DFS(Daemon):
             sleep(1)
          except KeyboardInterrupt:
             self.alive= False
+         except Exception, e:
+            print >> stderr, "queue communication error", str(e)
+            self.connect()
 
       self.stop()
 
