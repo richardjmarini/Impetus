@@ -651,6 +651,8 @@ class Node(Daemon):
       if hasattr(self, 'impd'):
          nodes= self.impd.get_nodes()
 
+      idle_time= datetime.utcnow()
+
       while self.alive:
 
          # get list of streams to track we are not currently tracking
@@ -683,6 +685,8 @@ class Node(Daemon):
             if not worker.is_alive():
                #print "worker dead", pid, worker.stream_id
                self.workers.pop(pid)
+            else:
+               idle_time= datetime.utcnow()
 
          # create workers for streams we are currently tracking
          for (stream_id, (queue, store, properties)) in streams_tracking.items():
@@ -696,6 +700,7 @@ class Node(Daemon):
                worker= Worker(self.id, stream_id, queue, store, properties)
                worker.start()
                self.workers.update([(worker.pid, worker)])
+               idle_time= datetime.utcnow()
                print "created worker", i, worker.pid, stream_id
 
          status= Status(
@@ -703,6 +708,7 @@ class Node(Daemon):
             streams= len(streams_tracking),
             workers= len(self.workers),
             uptime= datetime.utcnow() - self.start_time,
+            idletime= datetime.utcnow() - idle_time,
             properties= self.properties
          )
 
@@ -820,6 +826,9 @@ class DFS(Daemon):
          print "Number of Streams:", len(streams_tracking.keys())
          print "Number of Jobs:", sum([queue.qsize() for (queue, store, properties) in streams_tracking.values()])
          print "Number Store Items:", sum([len(store) for (queue, store, properties) in streams_tracking.values()])
+
+         for node_id, node in nodes.items():
+            print "\t",  node_id, node
 
          # stop tracking streams which are no longer active
          for stream_id in streams_tracking.keys():
