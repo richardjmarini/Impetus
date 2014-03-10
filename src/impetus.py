@@ -514,6 +514,9 @@ class Worker(Process):
 
          print "completed job: %s, %s, %s, %s" % (self.pid, job.get("id"), job.get("name"), job.get("status"))
 
+      except KeyboardInterrupt, e:
+         print "worker shutting down", self.pid
+         self.alive= False
       except Exception, e:
 
          sig= signal(SIGINT, SIG_IGN)
