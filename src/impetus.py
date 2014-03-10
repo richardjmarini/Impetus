@@ -24,7 +24,7 @@
 from copy import deepcopy
 from os import path, makedirs, getcwd, fork, chdir, setsid, umask, getpid, dup2, remove, kill, makedirs, pardir, stat, rename, curdir
 from sys import stdin, stdout, stderr, exc_info, exit
-from multiprocessing import Process
+from multiprocessing import Process, Value
 from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
 from uuid import uuid1
 from datetime import datetime
@@ -36,12 +36,12 @@ from json import dumps as jdumps, JSONEncoder
 from types import FunctionType
 from threading import Thread, Lock, currentThread, Event
 from traceback import extract_tb
-from socket import error as SocketError
+from socket import error as SocketError, getfqdn
 from atexit import register
 from codecs import open as open
 from zlib import compress, decompress
 from base64 import b64encode as encode, b64decode as decode
-from signal import SIGTERM
+from signal import signal, SIGINT, SIGTERM
 
 
 class Autovivification(object):
@@ -140,41 +140,41 @@ class Daemon(object):
       dup2(so.fileno(), stdout.fileno())
       dup2(se.fileno(), stderr.fileno())
 
-      register(self.delPID)
-      self.setPID()
+      register(self.del_pid)
+      self.set_pid()
 
-   def setPID(self):
+   def set_pid(self, pid= None):
       '''
       Creates PID file for the current daemon on the filesystem
       '''
-      pid= str(getpid())
-      fh= open(self.pidfile, 'w')
-      fh.write(pid)
+      pid= str(getpid()) if not pid else str(pid)
+      fh= open(self.pidfile, 'a')
+      fh.write(pid + "\n")
       fh.close()
 
-   def delPID(self):
+   def del_pid(self):
       '''
        Removes the PID file from the filesystem
       '''
       remove(self.pidfile)
 
-   def getPID(self):
+   def get_pids(self):
       '''
       Reads the PID from the filesystem
       '''
       try:
-          pid= int(open(self.pidfile, 'r').read())
+          pids= open(self.pidfile, 'r').readlines()
       except IOError, e:
-          pid= None
+          pids= []
 
-      return pid
+      return map(int, pids)
 
    def start(self):
       '''
       Startup the daemon process
       '''
-      pid= self.getPID()
-      if pid:
+      pids= self.get_pids()
+      if pids:
          exit(1)
 
       self.daemonize()
@@ -184,139 +184,21 @@ class Daemon(object):
       '''
       Stops the daemon process
       '''
-      pid= self.getPID()
-      if not pid:
+      pids= self.get_pids()
+      if not pids:
          return
 
-      try:
-         kill(pid, SIGTERM)
-         sleep(0.1)
-         self.delPID()
-      except OSError, e:
-         if str(e).find('No such process') > 0:
-            if path.exists(self.pidfile):
-               self.delPID()
-         else:
-            exit(1)
+      for pid in pids:
+         try:
+            kill(pid, SIGTERM)
+            sleep(0.1)
+         except OSError, e:
+            if str(e).find('No such process') > 0:
+               continue
 
-   def restart(self):
-      '''
-      Restarts the daemon process
-      '''
-      self.stop()
-      self.start()
-
-   def run(self):
-      '''
-      Overridden in base class
-      '''
-      pass
-
-   '''
-   Damonizes base object
-   '''
-
-   def __init__(self, pidfile, stdin= "/dev/null", stdout= "/dev/null", stderr= "/dev/null"):
-      '''
-      Initializes daemon
-      '''
-      self.stdin= stdin
-      self.stdout= stdout
-      self.stderr= stderr
-      self.pidfile= pidfile
-      super(Daemon, self).__init__()
-
-   def fork(self):
-      '''
-      Forks off the the process into the background
-      '''
-      try:
-         pid= fork()
-         if pid > 0:
-            exit(0)
-      except OSError, e:
-         exit(1)
-
-   def daemonize(self):
-      '''
-      Forks then sets up the I/O stream for the daemon 
-      '''
-      self.fork()
-
-      chdir(getcwd())
-      setsid()
-      umask(0)
-  
-      self.fork()
-      stdout.flush()
-      stderr.flush()
-
-      si= file(self.stdin, 'w+')
-      so= file(self.stdout, 'a+')
-      se= file(self.stderr, 'a+', 0)
-
-      dup2(si.fileno(), stdin.fileno())
-      dup2(so.fileno(), stdout.fileno())
-      dup2(se.fileno(), stderr.fileno())
-
-      register(self.delPID)
-      self.setPID()
-
-   def setPID(self):
-      '''
-      Creates PID file for the current daemon on the filesystem
-      '''
-      pid= str(getpid())
-      fh= open(self.pidfile, 'w')
-      fh.write(pid)
-      fh.close()
-
-   def delPID(self):
-      '''
-       Removes the PID file from the filesystem
-      '''
-      remove(self.pidfile)
-
-   def getPID(self):
-      '''
-      Reads the PID from the filesystem
-      '''
-      try:
-          pid= int(open(self.pidfile, 'r').read())
-      except IOError, e:
-          pid= None
-
-      return pid
-
-   def start(self):
-      '''
-      Startup the daemon process
-      '''
-      pid= self.getPID()
-      if pid:
-         exit(1)
-
-      self.daemonize()
-      self.run()
-
-   def stop(self):
-      '''
-      Stops the daemon process
-      '''
-      pid= self.getPID()
-      if not pid:
-         return
-
-      try:
-         kill(pid, SIGTERM)
-         sleep(0.1)
-         self.delPID()
-      except OSError, e:
-         if str(e).find('No such process') > 0:
-            if path.exists(self.pidfile):
-               self.delPID()
-         else:
-            exit(1)
+      if path.exists(self.pidfile):
+         self.del_pid()
+         exit(0)
 
    def restart(self):
       '''
@@ -352,22 +234,6 @@ class Queue(Daemon):
          stdin= path.join(logdir, self.__class__.__name__ + ".in")
       )
 
-      #self.monitor= Thread(target= self.monitor)
-      #self.alive= Event()
-      #register(self.alive.set)
-
-   """
-   def monitor(self):
-     
-      print "starting queue monitor"
-      while self.alive.isSet():
-         for (stream_id, stream) in self.streams.items():
-            print "stream:", stream_id, stream.queue.qsize(), len(stream.store), self.alive.isSet()
-         sleep(1)
-      print "stopping queue monitor"
-
-   """
-
    def create_stream(self, **properties):
 
       stream= Stream(**properties)
@@ -382,7 +248,6 @@ class Queue(Daemon):
 
       server= self.manager.get_server()
       print "running"
-      #self.monitor.start()
       server.serve_forever()
 
 
@@ -610,7 +475,6 @@ class Worker(Process):
       super(Worker, self).__init__()
 
       self.alive= True
-      self.status= "idle"
       self.stream_id= stream_id
       self.queue= queue
       self.store= store
@@ -630,8 +494,6 @@ class Worker(Process):
             #print "stream idle", self.pid, self.stream_id
             self.alive= False
             return
-
-         self.status= "busy"
 
          job= self.store.get(job_id)
          job.update([("status", "processing")])
@@ -657,8 +519,6 @@ class Worker(Process):
          job.update([("result", result), ("status", "error")])
          self.store.update([(job.get("id"), job)])
 
-      self.status= "idle"
-
    def run(self):
 
       while self.alive:
@@ -667,7 +527,6 @@ class Worker(Process):
             self.process()
          except (UnboundLocalError, EOFError, IOError, SocketError) as e:
             print >> stderr, "worker communication error:", self.stream_id, str(e)
-            self.status= "idle"
             self.alive= False
 
          sleep(float(self.properties.get("frequency", 0.01)))
@@ -677,20 +536,15 @@ class Status(dict):
    def __init__(self, **kwargs):
 
       kwargs["timestamp"]= kwargs.get("timestamp", datetime.utcnow())
-      kwargs["streams"]= kwargs.get("streams", 0)
-      kwargs["active"]= kwargs.get("active", 0)
-      kwargs["jobs"]= kwargs.get("jobs", 0)
-      kwargs["mpps"]= kwargs.get("mpps", 0)
-
       super(Status, self).__init__(**kwargs)
 
-      self["required"]= self["jobs"] - self["active"]
 
 
 class Node(Daemon):
 
    def __init__(self, queue, qauthkey, mpps= 5, dfs= None, dauthkey= None, logdir= curdir, piddir= curdir, **properties):
 
+      self.id= getfqdn()
       self.queue= queue
       self.qauthkey= qauthkey
       self.mpps= mpps
@@ -700,6 +554,7 @@ class Node(Daemon):
 
       self.workers= {}
       self.alive= True
+      self.start_time= datetime.utcnow()
 
       register(self.shutdown)
 
@@ -779,7 +634,9 @@ class Node(Daemon):
       streams= self.impq.get_streams()
       streams_tracking= {} 
 
-      if None not in self.dfs:
+      # if reporting to DFS 
+      # track nodes via shared dict else maintain local dict
+      if hasattr(self, 'impd'):
          nodes= self.impd.get_nodes()
 
       while self.alive:
@@ -830,13 +687,16 @@ class Node(Daemon):
                print "created worker", i, worker.pid, stream_id
 
          status= Status(
-            number_of_workers= len(self.workers),
-            number_of_streams= len(streams_tracking),
-            queue_size= sum([queue.qsize() for (stream_id, (queue, store, properties)) in streams_tracking.items()]),
-            store_size= sum([len(store) for (stream_id, (queue, store, properties)) in streams_tracking.items()]),
-            mpps= self.mpps
+            mpps= self.mpps,
+            streams= len(streams_tracking),
+            workers= len(self.workers),
+            uptime= datetime.utcnow() - self.start_time,
+            properties= self.properties
          )
-         #print "Status:", status
+
+         if hasattr(self, 'impd'):
+            nodes.update([(self.id, status)])
+
          sleep(1)
 
       self.shutdown()
@@ -866,14 +726,21 @@ class DFS(Daemon):
 
    def __init__(self, address, authkey, queue, qauthkey, logdir= curdir, piddir= curdir):
 
+      super(DFS, self).__init__(
+         pidfile= path.join(piddir, self.__class__.__name__ + ".pid"),
+         stdout= path.join(logdir, self.__class__.__name__ + ".out"),
+         stderr= path.join(logdir, self.__class__.__name__ + ".err"),
+         stdin= path.join(logdir, self.__class__.__name__ + ".in")
+      )
+
       self.address= address
       self.authkey= authkey
 
       self.queue= queue
       self.qauthkey= qauthkey
 
-      self.alive= True
       self.nodes= {}
+      self.alive= True
 
       self.manager= SyncManager(address= self.address, authkey= self.authkey)
       self.manager.register("get_nodes", callable= lambda: self.nodes, proxytype= DictProxy)
@@ -902,9 +769,41 @@ class DFS(Daemon):
             print "could not connect ...trying again", str(e)
             sleep(1)
 
+   def monitor(self):
+
+      streams= self.impq.get_streams()
+
+      while self.alive: 
+         print "status", len(self.nodes) # , len(streams), sum([stream.queue.size() for (stream_id, stream) in streams])
+         sleep(1)
+
+   def startup(self):
+
+      pid= getpid()
+
+      print "mananger process running", pid
+      self.set_pid(pid= pid)
+
+
+   def stop(self):
+
+      print "shutting down ...please wait this may take up to 20 seconds"
+      if hasattr(self.manager, "shutdown"):
+         self.manager.shutdown()
+
+      print "dfs has shutdown"
+      super(DFS, self).stop()
+
    def run(self):
 
-      server= self.manager.get_server()
-      print "running"
-      server.serve_forever()
+      print "dfs running", getpid()
+      self.manager.start(self.startup)
+      while self.alive:
+         try:
+            self.monitor()
+            sleep(1)
+         except KeyboardInterrupt:
+            self.alive= False
+
+      self.stop()
 
