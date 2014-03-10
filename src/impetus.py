@@ -713,7 +713,10 @@ class Node(Daemon):
       if hasattr(self, 'impd'):
          print "de-registering nodes with dfs"
          nodes= self.impd.get_nodes()
-         del nodes[self.id]
+         try:
+            del nodes[self.id]
+         except KeyError:
+            print >> stderr, "node not registered with dfs", self.id
  
       print "node shutdown complete."
       super(Node, self).stop()
