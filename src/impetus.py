@@ -252,7 +252,7 @@ class Queue(Daemon):
 
 
 _declaration_order= 0
-class Client(object):
+class Impetus(object):
 
    statuses= ("forked", "processed")
 

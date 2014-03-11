@@ -26,29 +26,29 @@
 from optparse import OptionParser, make_option
 from os import curdir, pardir, path
 from sys import stdout, stderr, argv
-from impetus import Client
+from impetus import Impetus
 from time import sleep
 
-class Helloworld(Client):
+class Helloworld(Impetus):
 
    def __init__(self, address, authkey, taskdir= curdir, id= None, **properties):
 
       self.address= address
       super(Helloworld, self).__init__(self.address, authkey, taskdir, id, **properties)
 
-   @Client.node
+   @Impetus.node
    def pow(i):
       
       return i * i
 
-   @Client.startup
+   @Impetus.startup
    def start(self):
 
       for i in range(0, 100):
          self.fork(self.pow, args= i)
          
 
-   @Client.process
+   @Impetus.process
    def stage1(self, ready, errors):
 
       total= 0
@@ -59,7 +59,7 @@ class Helloworld(Client):
       print "Total:", total
       print "Errors:", len(errors)
 
-   @Client.shutdown
+   @Impetus.shutdown
    def stop(self, ready, errors, progress):
 
       print "shutting down"
