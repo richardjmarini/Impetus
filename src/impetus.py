@@ -251,7 +251,7 @@ class Queue(Daemon):
       server.serve_forever()
 
 
-_thread_order= 0
+_declaration_order= 0
 class Client(object):
 
    statuses= ("forked", "processed")
@@ -304,9 +304,9 @@ class Client(object):
 
          target(self)
 
-      global _thread_order
-      _process.order= _thread_order
-      _thread_order+= 1
+      global _declaration_order
+      _process.order= _declaration_order
+      _declaration_order+= 1
       return _process
 
    @staticmethod
@@ -316,8 +316,8 @@ class Client(object):
 
          target(self, self.ready, self.errors, self._progress)
 
-      global _thread_order
-      _shutdown.order= _thread_order
+      global _declaration_order
+      _shutdown.order= _declaration_order
       return _shutdown
 
    @staticmethod
@@ -362,9 +362,9 @@ class Client(object):
 
             sleep(0.01)
          
-      global _thread_order
-      _process.order= _thread_order
-      _thread_order+= 1
+      global _declaration_order
+      _process.order= _declaration_order
+      _declaration_order+= 1
        
       return _process
 
