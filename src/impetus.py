@@ -860,16 +860,9 @@ class DFS(Daemon):
             print node_id, node.get("idletime"), node.get("lastactivity"), idletime,  node.get("uptime"), node.get("streams"), node.get("workers"), idle, end_of_billing_period
 
             if end_of_billing_period and idle:
-               print "dfs shutting down node", node_id, self.id
-               
-               if self.id == node_id:
-                  print "shutting down local node", node_id, node.get("pid")
-                  nodes.pop(node_id)
-                  kill(int(node.get("pid")), SIGTERM)
-                  # TODO: perhaps have node catch SIGTERM for clean shutdown
-               else:
-                  print "shutting down remote node", node_id
-                  # TODO: shutdown instance via boto
+               print "shutting down instance", node_id
+               # TODO: shutdown instance via boto
+               #nodes.pop(node_id)
 
          # stop tracking streams which are no longer active
          for stream_id in streams_tracking.keys():
