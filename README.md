@@ -5,7 +5,7 @@ impetus is an auto-scaling asynchronous distributed processing framework origina
 
 ###Queue
 
-impetus.Queue is a centralized context manager for the Impetus Framework.  Client applications connect to the queue via the Client API which consists of a series of remote methods that allow the Client API to create processing streams. An application can create one or more streams.  Each stream has a unique identifier.  If an identifier is not provided by the Client a unique identifier is created. The same stream can be used by one or more applications.  Each stream can be assigned various meta-data properties that describe the stream.  These meta-data properties are used by DFS (the dynamic frequency scaler) to assist in intelligent auto-scaling. A stream contains both a Priority Queue and a Key-Val data store. 
+impetus.Queue is a centralized context manager for the Impetus Framework.  Client applications connect to the queue via the API which consists of a series of remote methods that allow the client to create processing streams. An application can create one or more streams.  Each stream has a unique identifier.  If an identifier is not provided by the client a unique identifier is created. The same stream can be used by one or more applications.  Each stream can be assigned various meta-data properties that describe the stream.  These meta-data properties are used by DFS (the dynamic frequency scaler) to assist in intelligent auto-scaling. A stream contains both a Priority Queue and a Key-Val data store. 
 
 ```
 Usage: impetusqueue.py start|stop|restart|foreground
@@ -49,7 +49,7 @@ class Queue(Daemon)
 
 ###Node
 
-impetus.Node is a multi-processing management daemon that tracks active Streams and spawns Worker processes that are responsible for executing Jobs within the Stream they are assigned to process.  The frequency at which the management daemon spawns new Worker processes is configurable property that can be set within the meta-data properties of the stream by the "Client" when creating the Stream. The number of Worker processes that can be spawned per Stream is a configurable property of the Node called "mpps" (maximum processes per stream) and can be set by command line options (or by DFS) when the Node starts up. When a Stream goes idle, a configurable timeout property of the Stream via the streams meta-data properties, Node will stop tracking the Stream.  Nodes can be started up manually via the command line (for by DFS) to track streams with certain meta-data properties.
+impetus.Node is a multi-processing management daemon that tracks active Streams and spawns Worker processes that are responsible for executing Jobs within the Stream they are assigned to process.  The frequency at which the management daemon spawns new Worker processes is configurable property that can be set within the meta-data properties of the stream by the client when creating the Stream. The number of Worker processes that can be spawned per Stream is a configurable property of the Node called "mpps" (maximum processes per stream) and can be set by command line options (or by DFS) when the Node starts up. When a Stream goes idle, a configurable timeout property of the Stream via the streams meta-data properties, Node will stop tracking the Stream.  Nodes can be started up manually via the command line (for by DFS) to track streams with certain meta-data properties.
 
 ```
 Usage: impetusnode.py start|stop|restart|foreground
@@ -105,11 +105,11 @@ Options:
 
 ```
 
-###Client
-impetus.Client is a multi-threaded Client API to the impetus system that allows for easy creation and management of Streams and Jobs within the impetus system.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method. Jobs are created from the forked methods which are marshalled into python bytecode and assoicated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The API allows the client to set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..).  Each instance of Client has it's own stream. 
+###Impetus (client)
+impetus.Impetus is a multi-threaded interface to the impetus system that allows for easy creation and management of a processing Streams and it's Jobs.  It allows the developer to define local methods which can then be forked with an associated callback method.  If no callback method is provided then the next defined method will be considered the callback method. Jobs are created from the forked methods which are marshalled into python bytecode and assoicated with various properties (eg, arguments for the method, state information, Job identifiers, timestamps, etc..) and feed into their assoicated Stream to await processing by a Node. The client can set various properties (eg, frequency rate of the Stream, Job delay, Job priority, etc..).  Each instance of impetus.Impetus has it's own processing stream. 
 
 ```
-class Client(__builtin__.object)
+class Impetus(__builtin__.object)
  |  Methods defined here:
  |  
  |  __del__(self)
@@ -142,18 +142,18 @@ class Helloworld(Client):
       self.address= address
       super(Helloworld, self).__init__(self.address, authkey, taskdir, id)
 
-   @Client.node
+   @Impetus.node
    def pow(i):
       return i * i
 
-   @Client.startup
+   @Impetus.startup
    def start(self):
 
       for i in range(0, 100):
          self.fork(self.pow, args= i)
          sleep(0.025)
 
-   @Client.process
+   @Impetus.process
    def stage1(self, ready, errors):
 
       total= 0
@@ -164,7 +164,7 @@ class Helloworld(Client):
       print "Total:", total
       print "Errors:", len(errors)
 
-   @Client.shutdown
+   @Impetus.shutdown
    def stop(self, ready, errors, progress):
 
       print "shutting down"
@@ -189,7 +189,7 @@ thread: start 100/0 -> stage1 0/100 via stage1
 shutting down
 ```
 
-The Client API also stored all Job and context information within the tasks directory.  A file is created for each "process" method within the Client application and stores each Job processed by the corresponding method. Each file contains one Job per line.  Each Job is a b64encoded zlib compressed json structuers.
+All Job and context information is saved to the tasks directory.  A file is created for each "process" method within the client application and stores each Job processed by the corresponding method. Each file contains one Job per line.  Each Job is a b64encoded zlib compressed json structuers.
 ```
 $ ls -l ../tasks/b8b81d16-a47c-11e3-8b68-3ca9f46675e0/
 total 72
@@ -215,7 +215,7 @@ eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmag
 >>> loads(decompress(b64decode("eJxLZmRgYABhJiB2BuJiDiBRA0YiwRogGT8NIMEAZpaAiEwIH0QU8wMJPf2M1Jyc/PL8opwUvYLKEmagWEF+uTpIHmQqAxMACdINGA==")))
 <code object pow at 0x7f683b86c230, file "./helloworld.py", line 39>
 ```
-*Note:  Currently, the "transport" of the context information between Client, Queue and Node happens via an in memory data store within the Queue. The original version had a concept of "transports" which allowed the transport of context information to occur either via the in memory data store, filesystem or an s3bucket. The original version also allowed the option of using Memcache as the in memory data store.  I have not yet currently implemented these concepts in this newer version.  Mainly, because I never used them and didn't see a need for them.  The original version can be found here: https://github.com/richardjmarini/Impetus1.git*
+*Note:  Currently, the "transport" of the context information between client, Queue and Node happens via an in memory data store within the Queue. The original version had a concept of "transports" which allowed the transport of context information to occur either via the in memory data store, filesystem or an s3bucket. The original version also allowed the option of using Memcache as the in memory data store.  I have not yet currently implemented these concepts in this newer version.  Mainly, because I never used them and didn't see a need for them.  The original version can be found here: https://github.com/richardjmarini/Impetus1.git*
 
 
 Example Node output:
