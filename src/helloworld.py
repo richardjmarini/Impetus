@@ -46,7 +46,7 @@ class Helloworld(Client):
 
       for i in range(0, 100):
          self.fork(self.pow, args= i)
-         sleep(0.025)
+         
 
    @Client.process
    def stage1(self, ready, errors):
