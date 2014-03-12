@@ -263,10 +263,12 @@ class Queue(Daemon):
       stream= Stream(**properties)
 
       self.streams[stream.id]= stream
+      print "created stream", stream.id, properties
 
    def delete_stream(self, id):
 
       del self.streams[id]
+      print "deleting stream", id
 
    def run(self):
 
@@ -297,7 +299,7 @@ class Impetus(object):
       self.impq.connect()
 
       self.jobs= []
-      self.impq.create_stream(id= self.id, **properties)
+      self.impq.create_stream(id= self.id, ipaddress= self.ipaddress, **properties)
       self.store= self.impq.get_store(id= self.id)
       self.queue= self.impq.get_queue(id= self.id)
       self.alive= True
