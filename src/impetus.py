@@ -28,7 +28,7 @@ from multiprocessing import Process, Value
 from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
 from uuid import uuid1
 from datetime import datetime
-from itertools import izip
+from itertools import izip, product
 from time import sleep
 from Queue import PriorityQueue , Empty
 from marshal import dumps as mdumps, loads as mloads
@@ -36,13 +36,37 @@ from json import dumps as jdumps, JSONEncoder
 from types import FunctionType
 from threading import Thread, Lock, currentThread, Event
 from traceback import extract_tb
-from socket import error as SocketError, getfqdn
+from socket import error as SocketError, getfqdn, gethostbyname, gethostname, inet_ntoa, socket, AF_INET, SOCK_DGRAM
 from atexit import register
 from codecs import open as open
 from zlib import compress, decompress
 from base64 import b64encode as encode, b64decode as decode
 from signal import signal, SIGINT, SIGTERM, SIG_IGN
+from fcntl import ioctl
+from struct import pack
 
+def getipaddress():
+
+   ipaddress= None
+   ip= gethostbyname(gethostname())
+   interface_types= ["eth", "wlan", "wifi", "ath", "ppp"]
+   interface_range= map(str, range(0, 5))
+
+   if ip.startswith("127."):
+
+      for interface in map(''.join, product(interface_types, interface_range)):
+
+         try:
+            sock= socket(AF_INET, SOCK_DGRAM)
+            ipaddress= inet_ntoa(ioctl(sock.fileno(), 0x8915, pack("256s", interface[:15]))[20:24])
+            break
+         except IOError:
+            continue
+
+   if not ipaddress:
+      ipaddress= getfqdn()
+
+   return ipaddress
 
 class Autovivification(object):
 
@@ -259,6 +283,8 @@ class Impetus(object):
    def __init__(self, address, authkey, taskdir= "tasks", id= None, **properties):
 
       self.id= id if id else str(uuid1())
+      self.ipaddress= getipaddress()
+
       self.address= address
       self.taskdir= path.join(taskdir, self.id)
 
@@ -373,7 +399,7 @@ class Impetus(object):
       current_thread= currentThread()
       
       job= Job(
-         client= self.id,
+         client= {"id": self.id, "ipaddress": self.ipaddress},
          name= target.func_name,
          code= encode(compress(mdumps(target.func_code))),
          args= args,
@@ -558,7 +584,7 @@ class Node(Daemon):
 
    def __init__(self, queue, qauthkey, mpps= 5, dfs= None, dauthkey= None, logdir= curdir, piddir= curdir, **properties):
 
-      self.id= getfqdn()
+      self.id= getipaddress()
       self.queue= queue
       self.qauthkey= qauthkey
       self.mpps= mpps
@@ -773,7 +799,7 @@ class DFS(Daemon):
          stdin= path.join(logdir, self.__class__.__name__ + ".in")
       )
 
-      self.id= getfqdn()
+      self.id= getipaddress()
 
       self.address= address
       self.authkey= authkey
