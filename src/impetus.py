@@ -46,14 +46,20 @@ from fcntl import ioctl
 from struct import pack
 
 def getipaddress():
-
+   """
+   Determines which network card interface is being used
+   for communicating with the rest of the Impetus system
+   and returns the ip address of that interface.
+   """
    ipaddress= None
    ip= gethostbyname(gethostname())
+
    interface_types= ["eth", "wlan", "wifi", "ath", "ppp"]
    interface_range= map(str, range(0, 5))
 
+   # if the ip 
    if ip.startswith("127."):
-
+     
       for interface in map(''.join, product(interface_types, interface_range)):
 
          try:
@@ -69,6 +75,11 @@ def getipaddress():
    return ipaddress
 
 class Autovivification(object):
+   """
+   Recursivley traverses a dictionary data-structure
+   and creates and object with it's corresponding properties
+   based on the key/value pairs of the data-structre.
+   """
 
    def __init__(self, **properties):
 
@@ -84,6 +95,11 @@ class Autovivification(object):
             setattr(self, pname, pvalue)
 
 class Stream(Autovivification):
+   """
+   Creates a stream object which acts as a container 
+   for a priority queue, data-store and set of properties
+   associated with the stream.
+   """
  
    def __init__(self, **properties):
 
@@ -99,6 +115,10 @@ class Stream(Autovivification):
       self.store= {}
 
 class Job(dict):
+   """
+   Creates a Job object which acts as a container
+   for each item within the Streams data-store.
+   """
 
    def __init__(self, **kwargs):
 
@@ -110,6 +130,7 @@ class Job(dict):
       super(Job, self).__init__(**kwargs)
 
 class JobEncoder(JSONEncoder):
+   """Encodes the Job object into Json."""
 
    def default(self, obj):
       if isinstance(obj, datetime):
@@ -117,14 +138,16 @@ class JobEncoder(JSONEncoder):
       return JSONEncoder.default(self, obj)
 
 class Daemon(object):
-   '''
-   Damonizes base object
-   '''
+   """
+   Damonizes a base object by forking off 
+   from the controlling terminal. Maintains a 
+   PID file of the current process(es). Provides
+   start/stop and restart methods for the process(es). 
+   """
 
    def __init__(self, pidfile, stdin= "/dev/null", stdout= "/dev/null", stderr= "/dev/null"):
-      '''
-      Initializes daemon
-      '''
+      """Initializes daemon I/O streams"""
+
       self.stdin= stdin
       self.stdout= stdout
       self.stderr= stderr
@@ -132,9 +155,8 @@ class Daemon(object):
       super(Daemon, self).__init__()
 
    def fork(self):
-      '''
-      Forks off the the process into the background
-      '''
+      """Forks off the the process into the background"""
+
       try:
          pid= fork()
          if pid > 0:
@@ -143,9 +165,11 @@ class Daemon(object):
          exit(1)
 
    def daemonize(self):
-      '''
-      Forks then sets up the I/O stream for the daemon 
-      '''
+      """
+      Forks the process(es) from the controlling terminal
+      and redirects I/O streams for logging.
+      """
+
       self.fork()
 
       chdir(getcwd())
@@ -168,24 +192,21 @@ class Daemon(object):
       self.set_pid()
 
    def set_pid(self, pid= None):
-      '''
-      Creates PID file for the current daemon on the filesystem
-      '''
+      """Creates PID file for the current daemon."""
+
       pid= str(getpid()) if not pid else str(pid)
       fh= open(self.pidfile, 'a')
       fh.write(pid + "\n")
       fh.close()
 
    def del_pid(self):
-      '''
-       Removes the PID file from the filesystem
-      '''
+      """Removes the PID file."""
+
       remove(self.pidfile)
 
    def get_pids(self):
-      '''
-      Reads the PID from the filesystem
-      '''
+      """Reads the PID(s) from the PID file."""
+
       try:
           pids= open(self.pidfile, 'r').readlines()
       except IOError, e:
@@ -194,9 +215,12 @@ class Daemon(object):
       return map(int, pids)
 
    def start(self):
-      '''
-      Startup the daemon process
-      '''
+      """
+      Checks to see if the Daemon is already running
+      (ie, already has a PID in the PID file) and if not
+      then daemonizes the process(es).
+      """
+
       pids= self.get_pids()
       if pids:
          exit(1)
@@ -205,9 +229,8 @@ class Daemon(object):
       self.run()
 
    def stop(self):
-      '''
-      Stops the daemon process
-      '''
+      """Stops/Kills the daemon process(es)"""
+      
       pids= self.get_pids()
       if not pids:
          return
@@ -225,19 +248,21 @@ class Daemon(object):
          exit(0)
 
    def restart(self):
-      '''
-      Restarts the daemon process
-      '''
+      """Restarts the daemon process(es)."""
+
       self.stop()
       self.start()
 
    def run(self):
-      '''
-      Overridden in base class
-      '''
+      """Override this method in your base class."""
       pass
 
 class Queue(Daemon):
+   """
+   Creates remote methods for creating/deleteing streams,
+   and accessing the Streams priority queue, data-store and
+   properties.
+   """
 
    def __init__(self, address, authkey, logdir= curdir, piddir= curdir):
 
@@ -259,18 +284,30 @@ class Queue(Daemon):
       )
 
    def create_stream(self, **properties):
+      """
+      Creates stream and returns a unique stream identifier 
+      to the caller.  If an identifier was passed in by the caller
+      that identifier will be used to create the stream.  If the 
+      stream already exists then now new stream is created and the
+      existing stream is reused. 
+      """
 
       stream= Stream(**properties)
+      try:
+         stream= self.streams[stream.id]
+      except KeyError:
+         self.streams[stream.id]= stream
 
-      self.streams[stream.id]= stream
       print "created stream", stream.id, properties
 
    def delete_stream(self, id):
+      """Deletes the stream of the given identifier."""
 
       del self.streams[id]
       print "deleting stream", id
 
    def run(self):
+      """Starts up the Queue server and starts listing for requests."""
 
       server= self.manager.get_server()
       print "running"
@@ -279,10 +316,20 @@ class Queue(Daemon):
 
 _declaration_order= 0
 class Impetus(object):
+   """
+   Multi-threaded library for interfacing with the Impetus system. 
+   Hides threading considerations from the client.  Determines callback
+   methods through introspection if callbacks are not explicitly stated. 
+   Decorators are provided for the client to indicate methods which run on 
+   the remote nodes and local process methods which consume the results. 
+   Creates a single stream per instance.  The client can created additional 
+   streams through the Queue's remote methods via the "impq" handler. 
+   """
 
    statuses= ("forked", "processed")
 
    def __init__(self, address, authkey, taskdir= "tasks", id= None, **properties):
+      """Creates a stream and retrieves the streams priority queue and data-store."""
 
       self.id= id if id else str(uuid1())
       self.ipaddress= getipaddress()
@@ -317,16 +364,24 @@ class Impetus(object):
          pass
 
    def __del__(self):
+      """Deletes the stream that was created during initialization."""
 
       self.impq.delete_stream(self.id)
 
    @staticmethod
    def node(target):
+      """
+      All methods that are to run on remote nodes must be staticmethods
+      as the context of which the methods was defined can not be serialized.
+      """
 
       return target
 
    @staticmethod
    def startup(target):
+      """
+      Sets up the startup method for the object to run as a thread.
+      """
 
       def _process(self):
 
@@ -339,6 +394,14 @@ class Impetus(object):
 
    @staticmethod
    def shutdown(target):
+      """
+      Sets up the shutdown method to be excuted 
+      after all threads have been terminated.  The 
+      ready and errors parameters will contain a dict 
+      of file-handles pointing to the results files
+      (ie, ../tasks/<task_id>/<method>.ok, .err>
+      for each @process method.
+      """
    
       def _shutdown(self):
 
@@ -350,6 +413,17 @@ class Impetus(object):
 
    @staticmethod
    def process(target):
+      """
+      Sets up method to run as a thread. The method will be 
+      called with a list of currently available jobs that are 
+      either in a ready or error state. The thread will die
+      when it has finished processing all the jobs the previous
+      @process method forked and when the previous @process method
+      has terminatted. Each thread will be regulated so that all 
+      threads have an eventual chance of executing.  Order of execution
+      is not guarenteed and thread scheudling is handled by the 
+      operating system.
+      """
 
       def _process(self):
 
@@ -397,6 +471,11 @@ class Impetus(object):
       return _process
 
    def fork(self, target, args, callback= None, priority= None, job_id= None, **properties):
+      """
+      Turns the target method to be forked into byte-code and creates a Job.  The Job
+      is initialized to the starting state and placed the the streams priorty queue 
+      for execution. 
+      """
 
       current_thread= currentThread()
       
@@ -426,6 +505,10 @@ class Impetus(object):
       return job.get("id")
 
    def _thread_progress(self, name, status, count):
+      """
+      Keeps track of how many jobs the current
+      thread has forked/processed.
+      """
 
       with self._lock:
  
@@ -434,6 +517,7 @@ class Impetus(object):
          self._progress.update([(name, progress)])
 
    def _show_progress(self, current_thread):
+      """Displays the current threads progress to stdout."""
  
       msg= []
       with self._lock:
@@ -444,6 +528,13 @@ class Impetus(object):
       print "thread: %s via %s" % (''.join(msg)[:-4], current_thread.name)
          
    def _thread_regulator(self, current_thread, previous_thread):
+      """
+      Regulates the current thread so all threads have an eventual 
+      chance to run.  Thread scheduling is handled by the operating-system. 
+      If the operating-system repeatively schedules the same thread than
+      that thread is immediately put to sleep so the operating-system
+      can schedule a new thread.
+      """
 
       stall_time= 1
       while self._current_thread == current_thread:
@@ -462,8 +553,13 @@ class Impetus(object):
          self._current_thread= current_thread
 
    def _create_thread(self, name, method):
+      """
+      Creates thread for the @process method as well 
+      as error/ready file handlers for which all jobs
+      in an error/ready state are written to. All threads
+      are maintained in an internal thread list.
+      """
 
-      
       thread= Thread(target= method, name= name, args= (self, ))
       self.errors[name]= open(path.join(self.taskdir, '.'.join((name, "err"))), 'ab+')
       self.ready[name]= open(path.join(self.taskdir, '.'.join((name, "ok"))), 'ab+')
@@ -471,6 +567,10 @@ class Impetus(object):
       return thread
  
    def _link_threads(self, threads):
+      """
+      Creates previous/next properties for each thread based
+      on the threads declaration order.
+      """
  
       for i in range(len(threads)):
  
@@ -480,6 +580,7 @@ class Impetus(object):
       return threads[0]
 
    def _start_threads(self, threads):
+      """Starts all threads based on their delcaration order."""
 
       [thread.start() for thread in threads]
       [thread.join() for thread in threads]
@@ -495,6 +596,11 @@ class Impetus(object):
 
 
 class Worker(Process):
+   """
+   Worker process(es) are responsible for reading and 
+   executing jobs from the stream to which it was assigned 
+   ot process by the Node daemon.
+   """
 
    statuses= ("idle", "busy")
 
@@ -511,6 +617,13 @@ class Worker(Process):
 
 
    def process(self):
+      """
+      Waits for a job from the streams queue then reads the jobs context from the 
+      data-store.  The jobs method will then be de-serialized and executed. 
+      The results, including any execution errors, are then returned to the
+      data-store.  If no jobs appear on the streams queue within the designated
+      timeout then the Worker will die. 
+      """
 
       sig= None
       try:
@@ -562,6 +675,11 @@ class Worker(Process):
          sig= signal(SIGINT, sig)
 
    def run(self):
+      """
+      Starts the worker processing jobs from the stream to which it was assigned.
+      If a communication error occurs the Worker will attempt to re-establish 
+      communication with the stream.
+      """
 
       while self.alive:
 
@@ -573,18 +691,28 @@ class Worker(Process):
 
          sleep(float(self.properties.get("frequency", 0.01)))
 
+
 class Status(dict):
+   """Container class to track status of a given object."""
 
    def __init__(self, **kwargs):
 
       kwargs["timestamp"]= kwargs.get("timestamp", datetime.utcnow())
       super(Status, self).__init__(**kwargs)
 
-
-
 class Node(Daemon):
+   """
+   Node is started up on the remote instance via the bootstrapping process for that instance.
+   The node is responsible for tracking active streams and managing the workers that process
+   the jobs from thosee streams.  If a stream goes idle (ie, there are no more jobs in the streams
+   queue and all workers have died) then node will stop tracking the stream.  If jobs re-appear
+   on the stream Node will spawn new workers to process those jobs.  If a new stream appears 
+   Node will spawn new workers to processs the jobs on that stream.  Each worker is an independent
+   concurrent process that inherits the stream to process from the Node.
+   """
 
    def __init__(self, queue, qauthkey, mpps= 5, dfs= None, dauthkey= None, logdir= curdir, piddir= curdir, **properties):
+      """Initialize the Node's I/O stream and connect to the Queue and/or DFS."""     
 
       self.id= getipaddress()
       self.queue= queue
@@ -608,12 +736,19 @@ class Node(Daemon):
       )
 
    def connect(self):
+      """Connects to the Queue and/or DFS on the host/port for whic hthe Node was intialized for."""
 
       self.qconnect()
       if None not in self.dfs:
          self.dconnect()
 
    def qconnect(self):
+      """
+      Attempts to connect to the Queue on the host/port for which the Node was initialized for.
+      If no connection can be made, Node will keep attempting to connect until a connection
+      can be established.  One connection is established the remove methods requested will be
+      registered.
+      """
 
       # remove connection from cache:
       # BaseProxy class has thread local storage which caches the connection
@@ -642,6 +777,12 @@ class Node(Daemon):
             sleep(1)
 
    def dconnect(self):
+      """
+      Attempts to connect to the DFS on the host/port for which the Node was initialized for.
+      If no connection can be made, Node will keep attempting to connect until a connection
+      can be established. Once a connection can be established the remove methods requested
+      will be registered.
+      """
 
       # remove connection from cache:
       # BaseProxy class has thread local storage which caches the connection
@@ -667,6 +808,15 @@ class Node(Daemon):
             sleep(1)
 
    def process(self):
+      """
+      Starts tracking streams. When a stream is found which matches the Node's criteria
+      workers are assigned to the stream and spawned to start processing jobs from the
+      streams queue. When the stream goes idle and all workers for that stream have died
+      the Node will stop tracking the stream until new jobs appear on the stream. Node will
+      limit the amount of workers it can spawn for a stream to the configred amount.  If Node was
+      started with the --dfs option then status updates about how many streams, workers and jobs
+      are being processed will continually be sent back to DFS via a configurable rate.
+      """
 
       print "processing", self.mpps
 
@@ -751,6 +901,11 @@ class Node(Daemon):
       self.stop()
 
    def stop(self):
+      """
+      Starts the shutdown process for the Node.  Waits for all
+      workers to finish their activity. If Node was started with 
+      the --dfs option then it will de-register itself with DFS.
+      """
 
       # wait for workers to finish before shutting down
       print "shutting down node..."
@@ -773,6 +928,11 @@ class Node(Daemon):
       super(Node, self).stop()
 
    def run(self):
+      """
+      Starts processing the streams which match the given properties of the Node.
+      If a connection error between Node and Queue/DFs occurs Node will continually
+      try to re-establish connection.
+      """
 
       while self.alive:
          try:
@@ -787,13 +947,27 @@ class Node(Daemon):
 
 
 class DFS(Daemon):
+   """
+   The Dynamic Frequency Scaler is responsible for 
+   starting up instances and bootstrapping them with Node 
+   to start processing jobs.  DFS will gather update statistics 
+   from all the Nodes that are registered with it and spin up/down
+   instances as needed. A configurable "billing period" can be set
+   so DFS will make the most effective use of the instance for the 
+   duration of the billing cycle.  Idle Nodes will be terminated
+   when the end of the billing cycle is reached.  
+   """
 
    billing_period= 3000
    idle_time= 300
    seconds_per_day= 86400
 
    def __init__(self, address, authkey, queue, qauthkey, logdir= curdir, piddir= curdir):
-
+      """
+      Initializes the available remote methods 
+      and I/O streams to be used for the method.  
+      Establishes connection to the Queue. 
+      """
       super(DFS, self).__init__(
          pidfile= path.join(piddir, self.__class__.__name__ + ".pid"),
          stdout= path.join(logdir, self.__class__.__name__ + ".out"),
@@ -818,6 +992,12 @@ class DFS(Daemon):
       self.connect()
 
    def connect(self):
+      """
+      Attempts to connect to the Queue on the host/port for which the DFS was initialized for.
+      If no connection can be made, DFS will keep attempting to connect until a connection
+      can be established.  One connection is established the remove methods requested will be
+      registered.
+      """
 
       # remove connection from cache:
       # BaseProxy class has thread local storage which caches the connection
@@ -845,6 +1025,12 @@ class DFS(Daemon):
 
 
    def monitor(self):
+      """
+      Starts collection and monitoring status messages received by all registered
+      nodes as well as the Queue.  Will startup new instances and bootstrap them with Node
+      as required.  When registered Nodes go idle DFS continue to make efficent use of the Node
+      and will only terminate it at the end of the billing cycle.
+      """
 
       nodes= self.manager.get_nodes()
       streams= self.impq.get_streams()
@@ -900,14 +1086,18 @@ class DFS(Daemon):
          sleep(1)
 
    def startup(self):
+      """
+      Start the DFS processing running and 
+      start listening for connections from Node.
+      """
 
       pid= getpid()
 
       print "mananger process running", pid
       self.set_pid(pid= pid)
 
-
    def stop(self):
+      """Close any connections to DFS and terminate the daemon."""
 
       print "shutting down ...please wait this may take up to 20 seconds"
       if hasattr(self.manager, "shutdown"):
@@ -917,6 +1107,11 @@ class DFS(Daemon):
       super(DFS, self).stop()
 
    def run(self):
+      """
+      Start the DFS daemon running and start the monitoring process.  
+      If a communication error accurs between DFS and the Queue 
+      DFS will continue to try and re-establish connection.
+      """
 
       print "dfs running", getpid()
       self.manager.start(self.startup)
