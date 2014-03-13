@@ -1,0 +1,7 @@
+# Impetus
+   Host github.com-Impetus
+   Hostname github.com
+   User git
+   PreferredAuthentications publickey
+   IdentityFile ~/.ssh/impetus_rsa
+   IdentitiesOnly yes
