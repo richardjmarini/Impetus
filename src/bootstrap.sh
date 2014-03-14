@@ -28,7 +28,9 @@ log_file="$current_dir/bootstrap";
 #----------------------------------------
 # $deploy_key
 # $queue
+# $qport
 # $dfs
+# $dport
 # $s3
 # $mpps
 
@@ -103,6 +105,6 @@ getrepo "git" "github.com-Impetus" "richardjmarini/Impetus.git";
 echo "starting Impetus Node";
 
 cd $install_dir/Impetus/src;
-cmd="./impetusnode.py --queue=$queue --dfs=$dfs --mpps=$mpps start";
+cmd="./impetusnode.py --queue=$queue --qport=$qport --dfs=$dfs --dport=$dport --mpps=$mpps start";
 
 execute "$cmd" "$log_file";

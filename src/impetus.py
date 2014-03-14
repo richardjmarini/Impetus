@@ -1051,7 +1051,9 @@ class DFS(Daemon):
       bootstrap= template.safe_substitute(
          deploy_key= deploy_key,
          queue= self.queue,
-         dfs= self.dfs,
+         qport= self.qport,
+         dfs= self.address[0],
+         dport= self.address[1],
          mpps= self.mpps
       )
 
