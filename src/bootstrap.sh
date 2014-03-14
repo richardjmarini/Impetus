@@ -19,7 +19,8 @@
 #    You should have received a copy of the GNU General Public License
 #    along with Impetus.  If not, see <http://www.gnu.org/licenses/>.
 #---------------------------------------------------------------------------
-current_dir=`pwd`;
+current_dir="/home/ubuntu";
+
 install_dir="$current_dir/Impetus";
 log_file="$current_dir/bootstrap";
 
@@ -81,9 +82,7 @@ function getrepo {
 #----------------------------------------
 cd $install_dir;
 
-# install the Impetus deploy key and config file
-echo "installing deploy keys"
-echo "$deploykey" > /root/.ssh/impetus_rsa;
+echo "installing deploy key and ssh_config file";
 
 echo "# Impetus
    Host github.com-Impetus
@@ -94,7 +93,9 @@ echo "# Impetus
    IdentitiesOnly yes
 " > /root/.ssh/config;
 
-execute "chmod 600 /root/.ssh/*" "$log_file";
+echo "$deploykey" > /root/.ssh/impetus_rsa;
+
+execute "chmod 600 /root/.ssh/impetus_rsa" "$log_file";
 
 echo "cloning Impetus";
 getrepo "git" "github.com-Impetus" "richardjmarini/Impetus.git";
