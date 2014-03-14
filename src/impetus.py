@@ -1053,7 +1053,7 @@ class DFS(Daemon):
          deploykey= deploykey,
          queue= self.queue[0],
          qport= self.queue[1],
-         dfs= self.address[0],
+         dfs= self.id,
          dport= self.address[1],
          mpps= self.mpps
       )
@@ -1085,17 +1085,19 @@ class DFS(Daemon):
                print >> stderr, "could not get update for instance"
                pass
             print "waiting for instance to startup"
-            sleep(1)
+            sleep(5)
          print "instance running", instance.private_ip_address
 
          while instance.private_ip_address not in nodes.keys():
             print "waiting for node to bootstrap", instance.private_ip_address
-            sleep(1)
+            sleep(5)
          print "node bootstrapped", instance.private_ip_address
 
    def shutdown_node(self, nodes, instance):
 
-      print "shutting down node", instance.private_ip_address
+      private_ip_adrress= instance.private_ip_address
+
+      print "shutting down node", private_ip_address
 
       try:
          instance.stop()
@@ -1110,10 +1112,13 @@ class DFS(Daemon):
             print >> stderr, "could not get update for instance"
             pass
          print "waiting for instance to stop"
+         sleep(5)
+
       print "instance stopped"
       instance.terminate()
-
-      nodes.pop(instance.private_ip_address)
+      print "instance terminated"
+      nodes.pop(private_ip_address)
+      print "stopped tracking node"
 
    def monitor(self):
       """
@@ -1133,6 +1138,7 @@ class DFS(Daemon):
 
          for stream_id in streams_to_track:
             if stream_id not in streams_tracking:
+               print "tracking stream", stream_id
                streams_tracking.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id)))])
 
          # calculate our current status
@@ -1187,6 +1193,7 @@ class DFS(Daemon):
          # stop tracking streams which are no longer active
          for stream_id in streams_tracking.keys():
             if stream_id not in streams.keys():
+               print "stopped tracking stream", stream_id
                streams_tracking.pop(stream_id)
 
          sleep(1)
