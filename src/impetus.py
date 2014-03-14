@@ -1066,7 +1066,6 @@ class DFS(Daemon):
    def startup_node(self, nodes, startup_count= 1):
 
       print "starting up nodes", startup_count
-      return
 
       bootstrap= self.get_bootstrap()
   
