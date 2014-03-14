@@ -19,16 +19,18 @@
 #    You should have received a copy of the GNU General Public License
 #    along with Impetus.  If not, see <http://www.gnu.org/licenses/>.
 #---------------------------------------------------------------------------
+current_dir=`pwd`;
+install_dir="$current_dir/Impetus";
+log_file="$current_dir/bootstrap";
 
-installDir="/home/rmarini";
-git="/usr/bin/git";
-pip="/usr/bin/pip";
-logFile="/home/rmarini/bootstrap";
-
-queue="%(queue)s";
-dfs="%(dfs)s";
-s3="%(s3)s";
-mpps=%(mpps)s;
+#----------------------------------------
+# Template variables replaced by DFS
+#----------------------------------------
+# $deploy_key
+# $queue
+# $dfs
+# $s3
+# $mpps
 
 #----------------------------------------
 # helper functions
@@ -59,13 +61,13 @@ function executebg {
    fi;
 }
 
-function getRepo {
+function getrepo {
    username=$1;
    hostname=$2;
    reponame=$3;
 
-   cmd="$git clone $username@$hostname:$reponame";
-   execute "$cmd" "$logFile";
+   cmd="git clone $username@$hostname:$reponame";
+   execute "$cmd" "$log_file";
 }
 
 #----------------------------------------
@@ -73,43 +75,34 @@ function getRepo {
 #----------------------------------------
 
 #----------------------------------------
-# install Impetus repo
+# install Impetus deploy keys and repo
 #----------------------------------------
-cd $installDir;
+cd $install_dir;
+
+# install the Impetus deploy key and config file
+echo "installing deploy keys"
+execute "echo $deploy_key > /root/.ssh/impetus_rsa" "$log_file";
+execute "cat $ssh_config > /root/.ssh/config" "$log_file";
+execute "chmod 600 /root/.ssh/*" "$log_file";
 
 echo "cloning Impetus";
-getRepo "git" "github.com-Impetus" "richardjmarini/Impetus.git";
+getrepo "git" "github.com-Impetus" "richardjmarini/Impetus.git";
 
-#----------------------------------------
-# setup deploy keys for other repos 
-#----------------------------------------
-cd $installDir;
-
-# install deploy keys for repos
-execute "cp Impetus/keys/* /root/.ssh/" "$logFile";
-execute "chmod 600 /root/.ssh/*" "$logFile";
-execute "chmod 644 /root/.ssh/*.pub" "$logFile";
-
-#----------------------------------------
-# install other repos
-#----------------------------------------
-echo "cloning VectorSpaceSearchEngine"
-getRepo "git" "github.com-VectorSpaceSearchEngine" "richardjmarini/VectorSpaceSearchEngine.git";
 
 #----------------------------------------
 # startup virtual frame buffer -- used for selenium requests
 #----------------------------------------
-export DISPLAY=:99;
-cmd="Xvfb :99 -screen 0 800x600x16";
-echo $cmd;
-executebg "$cmd" "$logFile";
+#export DISPLAY=:99;
+#cmd="Xvfb :99 -screen 0 800x600x16";
+#echo $cmd;
+#executebg "$cmd" "$log_file";
 
 #----------------------------------------
 # startup Impetus Node
 #----------------------------------------
 echo "starting Impetus Node";
 
-cd $installDir/Impetus/src;
-cmd="./impetusnode.py --queue=$queue --dfs=$dfs --pidDir=../pid --logDir=../log --mpps=$mpps --s3=$s3 start";
+cd $install_dir/Impetus/src;
+cmd="./impetusnode.py --queue=$queue --dfs=$dfs --mpps=$mpps start";
 
-execute "$cmd" "$logFile";
+execute "$cmd" "$log_file";

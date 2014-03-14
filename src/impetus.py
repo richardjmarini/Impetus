@@ -21,8 +21,10 @@
 #    along with Impetus.  If not, see <http://www.gnu.org/licenses/>.
 #---------------------------------------------------------------------------
 
+from string import Template
+from boto.ec2 import EC2Connection
 from copy import deepcopy
-from os import path, makedirs, getcwd, fork, chdir, setsid, umask, getpid, dup2, remove, kill, makedirs, pardir, stat, rename, curdir, getppid
+from os import path, makedirs, getcwd, fork, chdir, setsid, umask, getpid, dup2, remove, kill, makedirs, pardir, stat, rename, curdir, getppid, getenv
 from sys import stdin, stdout, stderr, exc_info, exit
 from multiprocessing import Process, Value
 from multiprocessing.managers import SyncManager, DictProxy, BaseProxy
@@ -837,6 +839,8 @@ class Node(Daemon):
          streams_to_track= filter(lambda stream_id: stream_id not in streams_tracking.keys(), streams.keys())
 
          # if we are only tracking streams with specific properties
+         # TODO: need to think through this more
+         """
          if len(self.properties):
 
             # get properties for all the streams we are tracking
@@ -847,6 +851,7 @@ class Node(Daemon):
                streams_to_track= map(lambda sp: sp.get("id"), filter(lambda sp: set(sp.items()).issubset(self.properties.items()), stream_properties))
             else:
                streams_to_track= map(lambda sp: sp.get("id"), filter(lambda sp: set(filter(lambda (property_name, property_value): property_name != 'id', sp.items())).issubset(self.properties.items()), stream_properties))
+         """
 
          for stream_id in streams_to_track:
             print "tracking stream", stream_id
@@ -962,7 +967,7 @@ class DFS(Daemon):
    idle_time= 300
    seconds_per_day= 86400
 
-   def __init__(self, address, authkey, queue, qauthkey, logdir= curdir, piddir= curdir):
+   def __init__(self, address, authkey, queue, qauthkey, mnon, mpps, ec2= None, bootstrap= None, deploy_key= None, logdir= curdir, piddir= curdir):
       """
       Initializes the available remote methods 
       and I/O streams to be used for the method.  
@@ -982,6 +987,16 @@ class DFS(Daemon):
 
       self.queue= queue
       self.qauthkey= qauthkey
+
+      self.mnon= mnon
+      self.mpps= mpps
+      self.bootstrap= bootstrap
+      self.deploy_key= deploy_key
+
+      self.ec2= ec2
+      if self.ec2 != None:
+         self.ec2= EC2Connection(*self.ec2.split(','))
+         print "Connected to EC2", self.ec2
 
       self.nodes= dict()
       self.alive= True
@@ -1023,6 +1038,79 @@ class DFS(Daemon):
             print "could not connect ...trying again", str(e)
             sleep(1)
 
+   def get_bootstrap(self):
+      
+      fh= open(self.bootstrap, "r")
+      template= Template(fh.read())
+      fh.close()
+
+      fh= open(self.deploy_key, "r")
+      deploy_key= fh.read()
+      fh.close()
+
+      bootstrap= template.safe_substitute(
+         deploy_key= deploy_key,
+         queue= self.queue,
+         dfs= self.dfs,
+         mpps= self.mpps
+      )
+
+      print bootstrap
+         
+      return bootstrap
+
+
+   def startup_node(self, nodes, startup_count= 1):
+
+      print "starting up nodes", startup_count
+
+      bootstrap= self.get_bootstrap()
+  
+      try:
+         image= self.ec2.get_image("")
+         reservation= image.run(min_count= startup_count, max_count= startup_count, security_groups= [], key_name= "", instance_type= "", user_data= bootstrap, instance_initiated_shutdown_behavior= "terminate")
+      except Exception, e:
+         print >> stderr, "could not start instance(s): %s" % str(e)
+         return
+
+      # TODO: figure out better way todo this
+      for instance in reservation.instances:
+         while instance.state != "running":
+            try:
+               instance.update()
+            except Exception, e:
+               print >> stderr, "could not get update for instance"
+               pass
+            print "waiting for instance to startup"
+            sleep(1)
+         print "instance running", instance.private_ip_address
+
+         while instance.private_ip_address not in nodes.keys():
+            print "waiting for node to bootstrap", instance.private_ip_address
+            sleep(1)
+         print "node bootstrapped", instance.private_ip_address
+
+   def shutdown_node(self, nodes, instance):
+
+      print "shutting down node", instance.private_ip_address
+
+      try:
+         instance.stop()
+      except Exception, e:
+         print >> stderr, "could not stop instance", str(e)
+         return
+
+      while instance.state != "stopped":
+         try:
+            instance.update()
+         except Exception, e:
+            print >> stderr, "could not get update for instance"
+            pass
+         print "waiting for instance to stop"
+      print "instance stopped"
+      instance.terminate()
+
+      nodes.pop(instance.private_ip_address)
 
    def monitor(self):
       """
@@ -1044,39 +1132,55 @@ class DFS(Daemon):
             if stream_id not in streams_tracking:
                streams_tracking.update([(stream_id, (self.impq.get_queue(stream_id), self.impq.get_store(stream_id), self.impq.get_properties(stream_id)))])
 
-         print "----------------------------------------"
-         print "Number of Workers:", sum([node.get("workers") for node in nodes.values()])
-         print "Number of Jobs:", sum([queue.qsize() for (queue, store, properties) in streams_tracking.values()])
-         print "Number Store Items:", sum([len(store) for (queue, store, properties) in streams_tracking.values()])
-         print "Number of Streams:", len(streams_tracking.keys())
-         print "Number of Nodes:", len(nodes)
+         # calculate our current status
+         status= Status(
+            number_of_workers= sum([node.get("workers") for node in nodes.values()]),
+            max_number_of_workers= sum([node.get("mpps", 0) for node in nodes.values()]),
+            number_of_jobs= sum([queue.qsize() for (queue, store, properties) in streams_tracking.values()]),
+            number_of_store_items= sum([len(store) for (queue, store, properties) in streams_tracking.values()]),
+            number_of_streams= len(streams_tracking.keys()),
+            number_of_nodes= len(nodes)
+         )
 
-         # TODO: check for startup stitutation
+         print "Status:", status
+
+         # TODO: figure out how to scale based on stream/node properties
+
+         # if the we have more jobs than workers and we have less nodes running then we are allowed to start -- then scale up
+         if status.get("number_of_jobs") > status.get("max_number_of_workers") and status.get("number_of_nodes") < self.mnon:
+
+            # figure out how many nodes we should start
+            number_of_nodes_to_start= 1
+            if status.get("number_of_nodes") > 0:
+               number_of_nodes_to_start= min(self.mnon - status.get("number_of_nodes"), (status.get("number_of_jobs") / self.mpps) + 1) 
+
+            if self.ec2:
+               self.startup_node(nodes, number_of_nodes_to_start)
 
          # cycle through existing nodes and check for shutdown stitution
          for node_id, node in nodes.items():
 
+            # get the instance/node launchtime 
             instance= None
-            """
-               # if we've been up for an hr (-10 minutes) then shutdown before new billing cycle
-               (reservation, )= self.ec2Conn.get_all_instances(filters= {'private_dns_name': node_id})
-               (instance, )= reservation.instances
-            """
-
-            # calculate our time stamps
-            uptime= datetime.utcnow() - (datetime.strptime(instance.launch_time, '%Y-%m-%dT%H:%M:%S.000Z') if instance else node.get("starttime"))
+            starttime= node.get("starttime")
+            if self.ec2:
+               pass
+               reservations= self.ec2.get_all_instances(filters= {"private_ip_address": node_id})
+               (instance, )= reservations.instances 
+               starttime= datetime.strptime(instance.launch_time, '%Y-%m-%dT%H:%M:%S.000Z')
+               
+            # calculate our time stamps and flags
+            uptime= datetime.utcnow() - starttime
             idletime= datetime.utcnow() - node.get("lastactivity")
-
-            # calculate our flags
             end_of_billing_period= (uptime.days * self.seconds_per_day) + uptime.seconds >= self.billing_period
             idle= (idletime.days * self.seconds_per_day) + idletime.seconds >= self.idle_time
 
-            print node_id, node.get("idletime"), node.get("lastactivity"), idletime,  node.get("uptime"), node.get("streams"), node.get("workers"), idle, end_of_billing_period
+            print "Node:",  node, idle, end_of_billing_period
 
+            # if we are at the end of the billing period and the node is idel -- then scale down
             if end_of_billing_period and idle:
-               print "shutting down instance", node_id
-               # TODO: shutdown instance via boto
-               #nodes.pop(node_id)
+               if self.ec2:
+                  self.shutdown_node(nodes, instance)
 
          # stop tracking streams which are no longer active
          for stream_id in streams_tracking.keys():

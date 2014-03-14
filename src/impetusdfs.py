@@ -21,7 +21,7 @@
 #    along with Impetus.  If not, see <http://www.gnu.org/licenses/>.
 #---------------------------------------------------------------------------
 
-from os import curdir, pardir, path
+from os import curdir, pardir, path, getenv
 from optparse import OptionParser, make_option
 from sys import stdout, stderr, argv
 from impetus import DFS
@@ -39,7 +39,12 @@ def parse_args(argv):
       make_option("-p", "--qport", default= 50000, type= int, help= "port of queue instance"),
       make_option("-a", "--qauthkey", default= "impetus", help= "authorization key for queue instance"),
       make_option("-i", "--piddir", default= path.join(pardir, "pid"), help= "pid file directory"),
-      make_option("-l", "--logdir", default= path.join(pardir, "log"), help= "log file directory")
+      make_option("-l", "--logdir", default= path.join(pardir, "log"), help= "log file directory"),
+      make_option("-e", "--ec2", default= None, help= "<access key>,<secret key>"),
+      make_option("-n", "--mnon", default= 3, type=int, help= "max number of nodes dfs can start"),
+      make_option("-m", "--mpps", default= 5, type=int, help= "max number of processes per stream"),
+      make_option("-k", "--deploykey", default= path.join(getenv("HOME"), ".ssh", "impetus_rsa"), help= "deploy key file"),
+      make_option("-b", "--bootstrap", default= path.join(curdir,"bootstrap.sh"), help= "bootstrap file")
    ]]
 
    opt_parser.set_usage("%%prog %s" % ("|".join(opt_args)))
@@ -56,7 +61,7 @@ if __name__ == "__main__":
 
    args, opts, usage= parse_args(argv)
 
-   dfs= DFS((opts.dfs, opts.port), opts.authkey, (opts.queue, opts.qport), opts.qauthkey, opts.logdir, opts.piddir)
+   dfs= DFS((opts.dfs, opts.port), opts.authkey, (opts.queue, opts.qport), opts.qauthkey, opts.mnon, opts.mpps, opts.ec2, opts.bootstrap, opts.deploykey, opts.logdir, opts.piddir)
    if "start" in args:
       print "starting dfs in daemon mode"
       dfs.start()
