@@ -69,7 +69,12 @@ function getrepo {
    hostname=$2;
    reponame=$3;
 
-   cmd="git clone $username@$hostname:$reponame";
+   # ami we're using already has the repo cloned
+   #cmd="git clone $username@$hostname:$reponame";
+
+   cd $install_dir;
+   cmd="git pull";
+
    execute "$cmd" "$log_file";
 }
 
@@ -80,8 +85,6 @@ function getrepo {
 #----------------------------------------
 # install Impetus deploy keys and repo
 #----------------------------------------
-cd $install_dir;
-
 echo "installing deploy key and ssh_config file";
 
 echo "# Impetus
@@ -114,7 +117,7 @@ getrepo "git" "github.com-Impetus" "richardjmarini/Impetus.git";
 #----------------------------------------
 echo "starting Impetus Node";
 
-cd $install_dir/Impetus/src;
+cd $install_dir/src;
 cmd="./impetusnode.py --queue=$queue --qport=$qport --dfs=$dfs --dport=$dport --mpps=$mpps start";
 
 execute "$cmd" "$log_file";

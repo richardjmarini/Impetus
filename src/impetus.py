@@ -1066,6 +1066,7 @@ class DFS(Daemon):
    def startup_node(self, nodes, startup_count= 1):
 
       print "starting up nodes", startup_count
+      return
 
       bootstrap= self.get_bootstrap()
   
@@ -1167,9 +1168,8 @@ class DFS(Daemon):
             instance= None
             starttime= node.get("starttime")
             if self.ec2:
-               pass
-               reservations= self.ec2.get_all_instances(filters= {"private_ip_address": node_id})
-               (instance, )= reservations.instances 
+               (reservation, )= self.ec2.get_all_instances(filters= {"private_ip_address": node_id})
+               (instance, )= reservation.instances 
                starttime= datetime.strptime(instance.launch_time, '%Y-%m-%dT%H:%M:%S.000Z')
                
             # calculate our time stamps and flags
