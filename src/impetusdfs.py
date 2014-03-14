@@ -40,7 +40,7 @@ def parse_args(argv):
       make_option("-a", "--qauthkey", default= "impetus", help= "authorization key for queue instance"),
       make_option("-i", "--piddir", default= path.join(pardir, "pid"), help= "pid file directory"),
       make_option("-l", "--logdir", default= path.join(pardir, "log"), help= "log file directory"),
-      make_option("-e", "--ec2", default= None, help= "<access key>,<secret key>"),
+      make_option("-e", "--ec2", default= None, help= "<access key>,<secret key>,<ami-id>,<security group>,<key name>,<instance type>"),
       make_option("-n", "--mnon", default= 3, type=int, help= "max number of nodes dfs can start"),
       make_option("-m", "--mpps", default= 5, type=int, help= "max number of processes per stream"),
       make_option("-k", "--deploykey", default= path.join(getenv("HOME"), ".ssh", "impetus_rsa"), help= "deploy key file"),

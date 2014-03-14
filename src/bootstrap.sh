@@ -26,13 +26,13 @@ log_file="$current_dir/bootstrap";
 #----------------------------------------
 # Template variables replaced by DFS
 #----------------------------------------
-# $deploy_key
-# $queue
-# $qport
-# $dfs
-# $dport
-# $s3
-# $mpps
+# deploykey
+# queue
+# qport
+# dfs
+# dport
+# s3
+# mpps
 
 #----------------------------------------
 # helper functions
@@ -83,8 +83,17 @@ cd $install_dir;
 
 # install the Impetus deploy key and config file
 echo "installing deploy keys"
-execute "echo $deploy_key > /root/.ssh/impetus_rsa" "$log_file";
-execute "cat $ssh_config > /root/.ssh/config" "$log_file";
+echo "$deploykey" > /root/.ssh/impetus_rsa;
+
+echo "# Impetus
+   Host github.com-Impetus
+   Hostname github.com
+   User git
+   PreferredAuthentications publickey
+   IdentityFile ~/.ssh/impetus_rsa
+   IdentitiesOnly yes
+" > /root/.ssh/config;
+
 execute "chmod 600 /root/.ssh/*" "$log_file";
 
 echo "cloning Impetus";

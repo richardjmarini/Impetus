@@ -967,7 +967,7 @@ class DFS(Daemon):
    idle_time= 300
    seconds_per_day= 86400
 
-   def __init__(self, address, authkey, queue, qauthkey, mnon, mpps, ec2= None, bootstrap= None, deploy_key= None, logdir= curdir, piddir= curdir):
+   def __init__(self, address, authkey, queue, qauthkey, mnon, mpps, ec2= None, bootstrap= None, deploykey= None, logdir= curdir, piddir= curdir):
       """
       Initializes the available remote methods 
       and I/O streams to be used for the method.  
@@ -991,11 +991,12 @@ class DFS(Daemon):
       self.mnon= mnon
       self.mpps= mpps
       self.bootstrap= bootstrap
-      self.deploy_key= deploy_key
+      self.deploykey= deploykey
 
       self.ec2= ec2
       if self.ec2 != None:
-         self.ec2= EC2Connection(*self.ec2.split(','))
+         (self.access_key, self.security_key, self.ami_id, self.security_group, self.key_name, self.instance_type)= self.ec2.split(',')
+         self.ec2= EC2Connection(self.access_key, self.security_key)
          print "Connected to EC2", self.ec2
 
       self.nodes= dict()
@@ -1044,12 +1045,12 @@ class DFS(Daemon):
       template= Template(fh.read())
       fh.close()
 
-      fh= open(self.deploy_key, "r")
-      deploy_key= fh.read()
+      fh= open(self.deploykey, "r")
+      deploykey= fh.read()
       fh.close()
 
       bootstrap= template.safe_substitute(
-         deploy_key= deploy_key,
+         deploykey= deploykey,
          queue= self.queue[0],
          qport= self.queue[1],
          dfs= self.address[0],
@@ -1069,8 +1070,8 @@ class DFS(Daemon):
       bootstrap= self.get_bootstrap()
   
       try:
-         image= self.ec2.get_image("")
-         reservation= image.run(min_count= startup_count, max_count= startup_count, security_groups= [], key_name= "", instance_type= "", user_data= bootstrap, instance_initiated_shutdown_behavior= "terminate")
+         image= self.ec2.get_image(self.ami_id)
+         reservation= image.run(min_count= startup_count, max_count= startup_count, security_groups= [self.security_group], key_name= self.key_name, instance_type= self.instance_type, user_data= bootstrap, instance_initiated_shutdown_behavior= "terminate")
       except Exception, e:
          print >> stderr, "could not start instance(s): %s" % str(e)
          return
