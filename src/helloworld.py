@@ -44,7 +44,7 @@ class Helloworld(Impetus):
    @Impetus.startup
    def start(self):
 
-      for i in range(0, 1000):
+      for i in range(0, 10):
          self.fork(self.pow, args= i, delay=0.5)
          
 

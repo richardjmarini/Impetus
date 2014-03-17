@@ -967,7 +967,7 @@ class DFS(Daemon):
    """
 
    billing_period= 3000
-   idle_time= 300
+   idle_time= billing_period / 10
    seconds_per_day= 86400
 
    def __init__(self, address, authkey, queue, qauthkey, mnon, mpps, ec2= None, bootstrap= None, deploykey= None, logdir= curdir, piddir= curdir):
@@ -1174,7 +1174,7 @@ class DFS(Daemon):
             # get the instance/node launchtime 
             instance= None
             starttime= node.get("starttime")
-            if self.ec2:
+            if self.ec2 and self.id != node_id:
                (reservation, )= self.ec2.get_all_instances(filters= {"private_ip_address": node_id})
                (instance, )= reservation.instances 
                starttime= datetime.strptime(instance.launch_time, '%Y-%m-%dT%H:%M:%S.000Z')

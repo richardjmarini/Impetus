@@ -91,6 +91,7 @@ echo "installing deploy key and ssh_config file";
 
 echo "# Impetus
    Host github.com-Impetus
+   StrictHostKeyChecking no
    Hostname github.com
    User git
    PreferredAuthentications publickey
