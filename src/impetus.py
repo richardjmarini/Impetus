@@ -444,17 +444,14 @@ class Impetus(object):
                if job.get("status") == "ready":
                   ready.append(job)
                   self.ready[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
+                  self.store.pop(job.get("id"))
                elif job.get("status") == "error":
                   errors.append(job)
                   self.ready[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
+                  self.store.pop(job.get("id"))
                else:
                   continue
 
-               print "killing", job.get("id")
-               try:
-                  self.store.pop(job.get("id"))
-               except:
-                  print "already killed", job.get("id")
             
             if len(ready) or len(errors):
                target(self, ready, errors)
