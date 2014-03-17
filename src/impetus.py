@@ -903,6 +903,7 @@ class Node(Daemon):
 
          if hasattr(self, 'impd'):
             nodes.update([(self.id, status)])
+            print nodes, type(nodes)
 
          sleep(1)
 
@@ -966,7 +967,8 @@ class DFS(Daemon):
    when the end of the billing cycle is reached.  
    """
 
-   billing_period= 3000
+   #billing_period= 3000
+   billing_period= 300
    idle_time= billing_period / 10
    seconds_per_day= 86400
 
@@ -996,19 +998,21 @@ class DFS(Daemon):
       self.bootstrap= bootstrap
       self.deploykey= deploykey
 
+      self.nodes= {}
+
       self.ec2= ec2
       if self.ec2 != None:
          (self.access_key, self.security_key, self.ami_id, self.security_group, self.key_name, self.instance_type)= self.ec2.split(',')
          self.ec2= EC2Connection(self.access_key, self.security_key)
          print "Connected to EC2", self.ec2
 
-      self.nodes= dict()
       self.alive= True
 
       self.manager= SyncManager(address= self.address, authkey= self.authkey)
       self.manager.register("get_nodes", callable= lambda: self.nodes, proxytype= DictProxy)
 
       self.connect()
+      
 
    def connect(self):
       """
@@ -1054,7 +1058,7 @@ class DFS(Daemon):
 
       bootstrap= template.safe_substitute(
          deploykey= deploykey,
-         queue= self.queue[0],
+         queue= self.id,
          qport= self.queue[1],
          dfs= self.id,
          dport= self.address[1],
@@ -1135,7 +1139,6 @@ class DFS(Daemon):
       streams_tracking= {}
 
       while self.alive: 
-
          streams_to_track= filter(lambda stream_id: stream_id not in streams_tracking.keys(), streams.keys())
 
          for stream_id in streams_to_track:
@@ -1171,17 +1174,28 @@ class DFS(Daemon):
          # cycle through existing nodes and check for shutdown stitution
          for node_id, node in nodes.items():
 
-            # get the instance/node launchtime 
+            # get the instance/node launchtime and calculate timestamps
             instance= None
             starttime= node.get("starttime")
             if self.ec2 and self.id != node_id:
-               (reservation, )= self.ec2.get_all_instances(filters= {"private_ip_address": node_id})
-               (instance, )= reservation.instances 
-               starttime= datetime.strptime(instance.launch_time, '%Y-%m-%dT%H:%M:%S.000Z')
-               
-            # calculate our time stamps and flags
+               reservations= self.ec2.get_all_instances(filters= {"private_ip_address": node_id})
+               if reservations:
+                  instances= reservations[0].instances 
+                  if instances:
+                     instance= instances[0]
+                     starttime= datetime.strptime(instance.launch_time, '%Y-%m-%dT%H:%M:%S.000Z')
+                  else:
+                     nodes.pop(node_id)
+                     continue
+               else:
+                  nodes.pop(node_id)
+                  continue
+
             uptime= datetime.utcnow() - starttime
             idletime= datetime.utcnow() - node.get("lastactivity")
+            node.update([("starttime", starttime), ("uptime", uptime), ("idletime", idletime)])
+
+            # calculate our flags
             end_of_billing_period= (uptime.days * self.seconds_per_day) + uptime.seconds >= self.billing_period
             idle= (idletime.days * self.seconds_per_day) + idletime.seconds >= self.idle_time
 

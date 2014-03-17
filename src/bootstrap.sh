@@ -19,9 +19,11 @@
 #    You should have received a copy of the GNU General Public License
 #    along with Impetus.  If not, see <http://www.gnu.org/licenses/>.
 #---------------------------------------------------------------------------
+project_name="Impetus";
 current_dir="/home/ubuntu";
 
-install_dir="$current_dir/Impetus";
+install_dir="$current_dir/${project_name}";
+virtualenv_dir="$current_dir/envs";
 log_file="$current_dir/bootstrap";
 
 #----------------------------------------
@@ -85,12 +87,12 @@ function getrepo {
 #----------------------------------------
 
 #----------------------------------------
-# install Impetus deploy keys and repo
+# install deploy keys and repo
 #----------------------------------------
 echo "installing deploy key and ssh_config file";
 
-echo "# Impetus
-   Host github.com-Impetus
+echo "# ${project_name}
+   Host github.com-${project_name}
    StrictHostKeyChecking no
    Hostname github.com
    User git
@@ -103,8 +105,8 @@ echo "$deploykey" > /root/.ssh/impetus_rsa;
 
 execute "chmod 600 /root/.ssh/impetus_rsa" "$log_file";
 
-echo "cloning Impetus";
-getrepo "pull" "git" "github.com-Impetus" "richardjmarini/Impetus.git";
+echo "cloning ${project_name}";
+getrepo "pull" "git" "github.com-${project_name}" "richardjmarini/${project_name}.git";
 
 
 #----------------------------------------
@@ -116,11 +118,17 @@ getrepo "pull" "git" "github.com-Impetus" "richardjmarini/Impetus.git";
 #executebg "$cmd" "$log_file";
 
 #----------------------------------------
-# startup Impetus Node
+# switch to the virtual env
 #----------------------------------------
-echo "starting Impetus Node";
+source $virtualenv_dir/${project_name}/bin/activate
+
+#----------------------------------------
+# startup daemon process
+#----------------------------------------
+echo "starting ${project_name} Node";
 
 cd $install_dir/src;
 cmd="./impetusnode.py --queue=$queue --qport=$qport --dfs=$dfs --dport=$dport --mpps=$mpps start";
 
 execute "$cmd" "$log_file";
+exit(0);
