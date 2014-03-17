@@ -65,15 +65,17 @@ function executebg {
 }
 
 function getrepo {
-   username=$1;
-   hostname=$2;
-   reponame=$3;
+   operation=$1;
+   username=$2;
+   hostname=$3;
+   reponame=$4;
 
-   # ami we're using already has the repo cloned
-   #cmd="git clone $username@$hostname:$reponame";
+   if [ $operation = "pull" ]
+   then
+      cd $install_dir;
+   fi
 
-   cd $install_dir;
-   cmd="git pull";
+   cmd="git $operation $username@$hostname:$reponame";
 
    execute "$cmd" "$log_file";
 }
@@ -101,7 +103,7 @@ echo "$deploykey" > /root/.ssh/impetus_rsa;
 execute "chmod 600 /root/.ssh/impetus_rsa" "$log_file";
 
 echo "cloning Impetus";
-getrepo "git" "github.com-Impetus" "richardjmarini/Impetus.git";
+getrepo "pull" "git" "github.com-Impetus" "richardjmarini/Impetus.git";
 
 
 #----------------------------------------

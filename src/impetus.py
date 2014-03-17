@@ -450,9 +450,12 @@ class Impetus(object):
                else:
                   continue
 
-               #print "killing", job.get("id")
-               self.store.pop(job.get("id"))
-
+               print "killing", job.get("id")
+               try:
+                  self.store.pop(job.get("id"))
+               except:
+                  print "already killed", job.get("id")
+            
             if len(ready) or len(errors):
                target(self, ready, errors)
 
@@ -1058,8 +1061,6 @@ class DFS(Daemon):
          mpps= self.mpps
       )
 
-      print bootstrap
-         
       return bootstrap
 
 
@@ -1095,9 +1096,12 @@ class DFS(Daemon):
 
    def shutdown_node(self, nodes, instance):
 
-      private_ip_adrress= instance.private_ip_address
+      private_ip_address= instance.private_ip_address
 
       print "shutting down node", private_ip_address
+
+      nodes.pop(private_ip_address)
+      print "stopped tracking node"
 
       try:
          instance.stop()
@@ -1117,8 +1121,6 @@ class DFS(Daemon):
       print "instance stopped"
       instance.terminate()
       print "instance terminated"
-      nodes.pop(private_ip_address)
-      print "stopped tracking node"
 
    def monitor(self):
       """
@@ -1235,7 +1237,8 @@ class DFS(Daemon):
          except KeyboardInterrupt:
             self.alive= False
          except Exception, e:
-            print >> stderr, "queue communication error", str(e)
+            (filename, linenumber, functionname, statement)= extract_tb(exc_info()[2])[-1]
+            print >> stderr, "queue communication error", str(e),  filename, linenumber, functionname, statement
             self.connect()
 
       self.stop()

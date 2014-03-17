@@ -32,10 +32,10 @@ def parse_args(argv):
 
    opt_parser= OptionParser()
    [ opt_parser.add_option(opt) for opt in [
-      make_option("-d", "--dfs", default= "localhost", help= "address to bind dfs instance to"),
+      make_option("-d", "--dfs", default= "0.0.0.0", help= "address to bind dfs instance to"),
       make_option("-o", "--port", default= 50001, help= "port to bind dfs instance to"),
       make_option("-u", "--authkey", default= "impetus", help= "authorization key for dfs"),
-      make_option("-q", "--queue", default= "localhost", help= "host of queue instance"),
+      make_option("-q", "--queue", default= "0.0.0.0", help= "host of queue instance"),
       make_option("-p", "--qport", default= 50000, type= int, help= "port of queue instance"),
       make_option("-a", "--qauthkey", default= "impetus", help= "authorization key for queue instance"),
       make_option("-i", "--piddir", default= path.join(pardir, "pid"), help= "pid file directory"),

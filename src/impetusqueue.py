@@ -32,7 +32,7 @@ def parse_args(argv):
 
    opt_parser= OptionParser()
    [ opt_parser.add_option(opt) for opt in [
-      make_option("-q", "--queue", default= "localhost", help= "address to bind queue instance to"),
+      make_option("-q", "--queue", default= "0.0.0.0", help= "address to bind queue instance to"),
       make_option("-p", "--port", default= 50000, type= int, help= "port to bind queue instance to"),
       make_option("-a", "--authkey", default= "impetus", help= "authorization key for queue instance"),
       make_option("-i", "--piddir", default= path.join(pardir, "pid"), help= "pid file directory"),
