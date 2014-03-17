@@ -967,8 +967,7 @@ class DFS(Daemon):
    when the end of the billing cycle is reached.  
    """
 
-   #billing_period= 3000
-   billing_period= 300
+   billing_period= 3000
    idle_time= billing_period / 10
    seconds_per_day= 86400
 
