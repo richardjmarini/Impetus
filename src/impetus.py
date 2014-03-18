@@ -438,28 +438,26 @@ class Impetus(object):
 
             self._thread_regulator(current_thread, previous_thread)
 
-            ready= []
-            errors= []
-            for job in self.store.values():
-               if job.get("status") == "ready":
-                  ready.append(job)
-                  self.ready[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
-                  self.store.pop(job.get("id"))
-               elif job.get("status") == "error":
-                  errors.append(job)
-                  self.ready[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
-                  self.store.pop(job.get("id"))
-               else:
-                  continue
+            with self._lock:
+               jobs= filter(lambda job: job.get("callback") == current_thread.name, self.store.values())
+               ready= filter(lambda job: job.get("status") == "ready", jobs)
+               errors= filter(lambda job: job.get("status") == "error", jobs)
 
-            
+               for job in ready:
+                  self.ready[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
+                  self.store.pop(job.get("id"))
+
+               for job in errors:
+                  self.errors[current_thread.name].write(encode(compress(jdumps(job, cls= JobEncoder))) + "\n")
+                  self.store.pop(job.get("id"))
+        
             if len(ready) or len(errors):
                target(self, ready, errors)
 
             self._thread_progress(current_thread.name, "processed", len(ready) + len(errors))
             self._show_progress(current_thread)
 
-            if len(self.store) == 0 and previous_thread != None and previous_thread.is_alive() == False:
+            if len(jobs) == 0 and previous_thread != None and previous_thread.is_alive() == False:
                print "%s %s completed" % (datetime.utcnow(), current_thread.name)
                stdout.flush()
                self.alive= False
@@ -480,13 +478,12 @@ class Impetus(object):
       """
 
       current_thread= currentThread()
-      
       job= Job(
          client= {"id": self.id, "ipaddress": self.ipaddress},
          name= target.func_name,
          code= encode(compress(mdumps(target.func_code))),
          args= args,
-         callback= callback.func_name if callback else current_thread.next_thread.name,
+         callback= callback if callback else current_thread.next_thread.name,
          result= None,
          transport= None,
          **properties
@@ -575,7 +572,6 @@ class Impetus(object):
       """
  
       for i in range(len(threads)):
- 
         setattr(threads[i], "previous_thread", threads[i-1] if i > 0 else None)
         setattr(threads[i], "next_thread", threads[i+1] if i < len(threads)-1 else None)
   
