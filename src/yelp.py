@@ -16,10 +16,10 @@ class Yelp(Impetus):
 
    domain= 'http://www.yelp.com'
    seed_urls= [
-      #"/search?find_desc=restaurants&find_loc=Manhattan%2C+NY",
+      "/search?find_desc=restaurants&find_loc=Manhattan%2C+NY",
       "/search?find_desc=restaurants&find_loc=San%20Francisco+CA",
-      #"/search?find_desc=restaurants&find_loc=Los%20Angeles+CA",
-      #"/search?find_desc=restaurants&find_loc=Chicago%2C+IL"
+      "/search?find_desc=restaurants&find_loc=Los%20Angeles+CA",
+      "/search?find_desc=restaurants&find_loc=Chicago%2C+IL"
    ]
 
    def __init__(self, queue, authkey, taskdir= None, docdir= None, id= None, **properties):
@@ -151,37 +151,50 @@ class Yelp(Impetus):
             self.save_document(url, html)
             self.fork(self.fetch_next_url, html, callback= "extract_links", delay= randint(5, 15))
             self.fork(self.get_listing_urls, html, callback= "fetch_profiles")
-            sleep(0.025)   
+         sleep(0.025)   
+
+      for job in errors:
+         print "ERROR", job.get("result")
 
    @Impetus.process
    def fetch_profiles(self, ready, errors):
-         print "in fetch profiles"
-         for job in ready:
-            for url in job.get("result"):
-               print "fetch profile", url
-               self.fork(self.fetch_page, self.domain + url, callback= "process_profiles", delay= randint(5, 15))
-               sleep(0.025)
+      print "in fetch profiles"
+      for job in ready:
+         for url in job.get("result"):
+            print "fetch profile", url
+            self.fork(self.fetch_page, self.domain + url, callback= "process_profiles", delay= randint(5, 15))
+            sleep(0.025)
+
+      for job in errors:
+         print "ERROR", job.get("result")
 
    @Impetus.process
    def process_profiles(self, ready, errors):
-         print "in process profiles"
-         for job in ready:
-            (url, html)= job.get("result")
-            if html != None:
-               print "saving profile", url
-               self.save_document(url, html)
-               print "profile page", url, len(html)
-               self.fork(self.fetch_menu, html, callback= "process_menus", delay= randtime(5, 15))
-               sleep(0.025)
+      print "in process profiles"
+      for job in ready:
+         (url, html)= job.get("result")
+         if html != None:
+            print "saving profile", url
+            self.save_document(url, html)
+            print "profile page", url, len(html)
+            self.fork(self.fetch_menu, html, callback= "process_menus", delay= randint(5, 15))
+         sleep(0.025)
+
+      for job in errors:
+         print "ERROR", job.get("result")
 
    @Impetus.process
    def process_menus(self, ready, errors):
-         print "in process menus"
-         for job in ready:
-            (url, html)= job.get("result")
-            if html != None:
-               print "saving menu",  url
-               self.save_document(url, html)
+      print "in process menus"
+      for job in ready:
+         (url, html)= job.get("result")
+         if html != None:
+            print "saving menu",  url
+            self.save_document(url, html)
+         sleep(0.025)
+
+      for job in errors:
+         print "ERROR", job.get("result")
 
    @Impetus.shutdown
    def end(self, ready, errors, counter):
