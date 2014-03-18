@@ -457,7 +457,7 @@ class Impetus(object):
             self._thread_progress(current_thread.name, "processed", len(ready) + len(errors))
             self._show_progress(current_thread)
 
-            if len(jobs) == 0 and previous_thread != None and previous_thread.is_alive() == False:
+            if len(self.store) == 0 and previous_thread != None and previous_thread.is_alive() == False:
                print "%s %s completed" % (datetime.utcnow(), current_thread.name)
                stdout.flush()
                self.alive= False

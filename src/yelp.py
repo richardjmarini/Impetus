@@ -16,10 +16,10 @@ class Yelp(Impetus):
 
    domain= 'http://www.yelp.com'
    seed_urls= [
-      "/search?find_desc=restaurants&find_loc=Manhattan%2C+NY",
+      #"/search?find_desc=restaurants&find_loc=Manhattan%2C+NY",
       "/search?find_desc=restaurants&find_loc=San%20Francisco+CA",
-      "/search?find_desc=restaurants&find_loc=Los%20Angeles+CA",
-      "/search?find_desc=restaurants&find_loc=Chicago%2C+IL"
+      #"/search?find_desc=restaurants&find_loc=Los%20Angeles+CA",
+      #"/search?find_desc=restaurants&find_loc=Chicago%2C+IL"
    ]
 
    def __init__(self, queue, authkey, taskdir= None, docdir= None, id= None, **properties):
@@ -28,7 +28,8 @@ class Yelp(Impetus):
       super(Yelp, self).__init__(self.queue, authkey, taskdir, id, **properties)
       self.docdir= docdir
 
-      self.crawl_list= open(path.join(self.docdir, "crawl_list.tab"), "a+")
+      self.crawl_file= path.join(self.docdir, "crawl_list.tab")
+      self.crawl_list= open(self.crawl_file, "a+")
       try:
          self.document_id= int(self.crawl_list.readlines()[-1].split()[0])
          self.document_id+= 1
@@ -122,58 +123,62 @@ class Yelp(Impetus):
       fh.write(compress(html))
       fh.close()
 
-   def visted(self, url):
+   def visited(self, url):
 
       found= False
-      fh= open(path.join(self.docdir, "%s.doc" % (document_id)), 'wb')
+      fh= open(self.crawl_file, "r")
       for line in fh.readlines():
          if url in line:
             found= True
-
+      fh.close()
       return found
 
    @Impetus.startup
    def start(self):
 
       for url in self.seed_urls:
-         self.fork(self.fetch_page, self.domain + url, delay= randint(5, 10))
+         self.fork(self.fetch_page, self.domain + url, delay= randint(5, 15))
          sleep(0.025)   
 
    @Impetus.process
    def extract_links(self, ready, errors):
 
-      for (url, html) in [result.get('results') for result in ready]:
-         if html != None and self.visted(url) == False:
+      for job in ready:
+         (url, html)= job.get("result")
+         if html != None and self.visited(url) == False:
             print "extract links", url
 
             self.save_document(url, html)
-            self.fork(self.fetch_next_url, html, callback= self.extract_links, delay= randint(5, 10))
-            self.fork(self.get_listing_urls, html, callback= self.fetch_profiles)
+            self.fork(self.fetch_next_url, html, callback= "extract_links", delay= randint(5, 15))
+            self.fork(self.get_listing_urls, html, callback= "fetch_profiles")
             sleep(0.025)   
 
    @Impetus.process
    def fetch_profiles(self, ready, errors):
-
-         for url in [job.get("result") for job in ready]:
-            print "fetch profiles", url
-            self.fork(self.fetch_page, self.domain + url, delay= randint(5, 10))
-            sleep(1)
+         print "in fetch profiles"
+         for job in ready:
+            for url in job.get("result"):
+               print "fetch profile", url
+               self.fork(self.fetch_page, self.domain + url, callback= "process_profiles", delay= randint(5, 15))
+               sleep(0.025)
 
    @Impetus.process
    def process_profiles(self, ready, errors):
 
-         for (url, html) in [job.get("result") for job in ready]:
+         for job in ready:
+            (url, html)= job.get("result")
             if html != None:
                print "saving profile", url
                self.save_document(url, html)
                print "profile page", url, len(html)
-               self.fork(self.fetch_menu, html)
-               sleep(1)
+               self.fork(self.fetch_menu, html, callback= "process_menus", delay= randtime(5, 15))
+               sleep(0.025)
 
    @Impetus.process
    def process_menus(self, ready, errors):
 
-         for (url, html) in [job.get("result") for job in ready]:
+         for job in ready:
+            (url, html)= job.get("result")
             if html != None:
                print "saving menu",  url
                self.save_document(url, html)
