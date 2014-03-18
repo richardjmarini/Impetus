@@ -21,6 +21,19 @@ class Yelp(Impetus):
       "/search?find_desc=restaurants&find_loc=Los%20Angeles+CA",
       "/search?find_desc=restaurants&find_loc=Chicago%2C+IL"
    ]
+  
+   user_agents= [
+      'Mozilla/5.0 (iPad; U; CPU OS 3_2_1 like Mac OS X; en-us) AppleWebKit/531.21.10 (KHTML, like Gecko) Mobile/7B405',
+      'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36',
+      'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US) AppleWebKit/532.2 (KHTML, like Gecko) ChromePlus/4.0.222.3 Chrome/4.0.222.3 Safari/532.2',
+       'Mozilla/5.0 (compatible; MSIE 10.6; Windows NT 6.1; Trident/5.0; InfoPath.2; SLCC1; .NET CLR 3.0.4506.2152; .NET CLR 3.5.30729; .NET CLR 2.0.50727) 3gpp-gba UNTRUSTED/1.0',
+       'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; WOW64; Trident/6.0)',
+       'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0; SLCC2; Media Center PC 6.0; InfoPath.3; MS-RTC LM 8; Zune 4.7)',
+       'Mozilla/5.0 (Windows; U; MSIE 9.0; WIndows NT 9.0; en-US))',
+       'Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:25.0) Gecko/20100101 Firefox/25.0',
+       'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:24.0) Gecko/20100101 Firefox/24.0',
+       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:25.0) Gecko/20100101 Firefox/25.0'
+   ]
 
    def __init__(self, queue, authkey, taskdir= None, docdir= None, id= None, **properties):
 
@@ -41,7 +54,7 @@ class Yelp(Impetus):
    @Impetus.node
    def fetch_page(url):
 
-      from urllib2 import urlopen, HTTPRedirectHandler, build_opener, Request, build_opener, Request
+      from urllib2 import HTTPRedirectHandler, build_opener, Request
       from urllib import urlencode
       from re import match
 
@@ -52,13 +65,18 @@ class Yelp(Impetus):
                m= match(".*location\.replace\(\"(.*)\"\).*", str(line))
                return m.group(1)
 
-
-      response= urlopen(url, timeout= 300)
+      request= Request(url)
+      request.add_header('User-Agent', self.user_agents[randint(0, 9)])
+      opener= build_opener()
+      response= opener.open(request)
       html= response.read()
 
       if 'location.replace' in html:
          url= get_location_replace(html)
-         response= urlopen(url, timeout= 300)
+         request= Request(url)
+         request.add_header('User-Agent', self.user_agents[randint(0, 9)])
+         opener= build_opener()
+         response= opener.open(request)
          html= response.read()
       print "fetch page", url
       return (url, html)  
@@ -76,7 +94,7 @@ class Yelp(Impetus):
    def fetch_next_url(html):
 
       from bs4 import BeautifulSoup
-      from urllib2 import urlopen
+      from urllib2 import build_opener, Request
       from urllib import urlencode
 
       parser= BeautifulSoup(html, "html").find_all("a", class_= "page-option prev-next")
@@ -86,7 +104,10 @@ class Yelp(Impetus):
          url= prevnext["href"]
          print "FOUND", url
       print "USING", url
-      request= urlopen('http://yelp.com' + url, timeout= 300)
+      request= Request('http://yelp.com' + url)
+      request.add_header('User-Agent', self.user_agents[randint(0, 9)])
+      opener= build_opener()
+      request= opener.open(request)
       response= request.read()
 
       return (url, response)
@@ -95,13 +116,16 @@ class Yelp(Impetus):
    def fetch_menu(html):
 
       from bs4 import BeautifulSoup
-      from urllib2 import urlopen
+      from urllib2 import build_opener, Request
       from urllib import urlencode
 
       parser= BeautifulSoup(html, "html").find("a", class_= "menu-explore")
       if parser:
          url= parser["href"]
-         request= urlopen('http://yelp.com' + url, timeout= 300)
+         request= Request('http://yelp.com' + url)
+         request.add_header('User-Agent', self.user_agents[randint(0, 9)])
+         opener= build_opener()
+         request= opener.open(request)
          response= request.read()
       else:
          url= None
@@ -137,7 +161,7 @@ class Yelp(Impetus):
    def start(self):
 
       for url in self.seed_urls:
-         self.fork(self.fetch_page, self.domain + url, delay= randint(5, 15))
+         self.fork(self.fetch_page, self.domain + url, delay= randint(5, 20))
          sleep(0.025)   
 
    @Impetus.process
@@ -149,7 +173,7 @@ class Yelp(Impetus):
             print "extract links", url
 
             self.save_document(url, html)
-            self.fork(self.fetch_next_url, html, callback= "extract_links", delay= randint(5, 15))
+            self.fork(self.fetch_next_url, html, callback= "extract_links", delay= randint(5, 20))
             self.fork(self.get_listing_urls, html, callback= "fetch_profiles")
          sleep(0.025)   
 
@@ -162,7 +186,7 @@ class Yelp(Impetus):
       for job in ready:
          for url in job.get("result"):
             print "fetch profile", url
-            self.fork(self.fetch_page, self.domain + url, callback= "process_profiles", delay= randint(5, 15))
+            self.fork(self.fetch_page, self.domain + url, callback= "process_profiles", delay= randint(5, 20))
             sleep(0.025)
 
       for job in errors:
@@ -177,7 +201,7 @@ class Yelp(Impetus):
             print "saving profile", url
             self.save_document(url, html)
             print "profile page", url, len(html)
-            self.fork(self.fetch_menu, html, callback= "process_menus", delay= randint(5, 15))
+            self.fork(self.fetch_menu, html, callback= "process_menus", delay= randint(5, 20))
          sleep(0.025)
 
       for job in errors:
