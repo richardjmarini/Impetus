@@ -164,7 +164,7 @@ class Yelp(Impetus):
 
    @Impetus.process
    def process_profiles(self, ready, errors):
-
+         print "in process profiles"
          for job in ready:
             (url, html)= job.get("result")
             if html != None:
@@ -176,7 +176,7 @@ class Yelp(Impetus):
 
    @Impetus.process
    def process_menus(self, ready, errors):
-
+         print "in process menus"
          for job in ready:
             (url, html)= job.get("result")
             if html != None:
