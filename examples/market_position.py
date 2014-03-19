@@ -197,6 +197,6 @@ if __name__ == '__main__':
 
    args, opts, usage= parse_args(argv)
 
-   market_position= MarketPosition((opts.queue, opts.port), opts.authkey, taskdir= opts.authkey, docdir= opts.docdir)
+   market_position= MarketPosition((opts.queue, opts.port), opts.authkey, taskdir= opts.taskdir, docdir= opts.docdir)
    print "My Task Id:", market_position.id
    market_position.run()
