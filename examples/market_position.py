@@ -14,7 +14,12 @@ class MarketPosition(Impetus):
       'search': '/search',
       'profile': 'http://www.yelp.com/biz',
       'menu': '/menu'
-    }
+   }
+   
+   attribution_types= [
+       {'tag': 'img', 'class': 'menu-provider-attribution'},
+       {'tag': 'p', 'class': 'business-provider-menu'}
+   ]
 
    def __init__(self, address, authkey, taskdir= curdir, docdir= "documents", id= None, **properties):
 
@@ -35,6 +40,28 @@ class MarketPosition(Impetus):
             break
 
       return index 
+
+   @Impetus.node
+   def attribution(args):
+
+      from bs4 import BeautifulSoup
+      from zlib import decompress
+
+      (index, attribution_types, html)= args
+
+      parser= BeautifulSoup(unicode(decompress(html), errors= 'ignore').encode('ascii'), "html")
+      for attribution_type in attribution_types:
+         attribution= parser.find(attribution_type.get("tag"), class_= attribution_type.get("class"))
+         if attribution:
+            if attribution.name == "img":
+               provider= attribution.attrs.get("alt")  
+            else:
+               provider= "Business Provided"
+         else:
+            provider= "Unknown"
+
+      index["provider"]= provider 
+      return index
       
    @Impetus.startup
    def start(self):
@@ -49,7 +76,17 @@ class MarketPosition(Impetus):
       for job in ready:
          index= job.get("result")
          self.counter[index.get("type")]+= 1
-         print job
+         if index.get("type") == "menu":
+            fh= open(path.join(self.docdir, "%s.doc" % index.get("document_id")), "r")
+            self.fork(self.attribution, args= (index, self.attribution_types, fh.read()))
+            fh.close()
+
+   @Impetus.process
+   def process_attribution(self, ready, errors):
+      for job in ready:
+         index= job.get("result")
+         print index.get("provider")
+         
 
    @Impetus.shutdown
    def stop(self, ready, errors, progress):
