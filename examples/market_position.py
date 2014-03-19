@@ -73,7 +73,7 @@ class MarketPosition(Impetus):
 
       (index, attribution_types, html)= args
       html= b64decode(html)
-      provider= "No Provider or Non-Yelp-Menu"
+      provider= "No Attribution"
 
       parser= BeautifulSoup(unicode(decompress(html), errors= 'ignore').encode('ascii'), "html")
       for attribution_type in attribution_types:
@@ -132,7 +132,7 @@ class MarketPosition(Impetus):
                (document_id, url)= menu.split()
 
                fh= open(path.join(self.docdir, "%s.doc" % document_id), "r")
-               self.fork(self.attribution, args= (index, self.attribution_types, b64encode(fh.read())))
+               self.fork(self.attribution, args= (index, self.attribution_types,  b64encode(fh.read())))
                fh.close()
 
    @Impetus.process
@@ -141,12 +141,16 @@ class MarketPosition(Impetus):
       if len(errors):
          print "WARNING!!!!!!!!!!", len(errors), "errors"
 
+      for location in self.locctr.keys():
+         if location not in self.pctr.keys():
+            self.pctr[location]= {}
+
       for job in ready:
          index= job.get("result")
          try:
-            self.pctr[index.get("provider")]+= 1
+            self.pctr[index.get("location")][index.get("provider")]+= 1
          except KeyError:
-            self.pctr[index.get("provider")]= 1
+            self.pctr[index.get("location")][index.get("provider")]= 1
 
    @Impetus.shutdown
    def stop(self, ready, errors, progress):
@@ -156,21 +160,33 @@ class MarketPosition(Impetus):
 
       print "========================================"
       print "Document Types:"
-      for key, val in self.dtctr.items():
-         print "\t", key, val, (val / float(sum(self.dtctr.values()))) * 100
+      for document_type, val in self.dtctr.items():
+         print "\t", document_type, val, (val / float(sum(self.dtctr.values()))) * 100
       print "\t", "Total", sum(self.dtctr.values())
       print
-      print "Locations:"
-      for key, val in self.locctr.items():
-         print "\t", key, val, (val / float(self.dtctr["profile"])) * 100
-      print "\t", "Total", sum(self.locctr.values())
+      print "Location Profiles:"
+      for location, val in self.locctr.items():
+         print "\t", location, val, (val / float(self.dtctr["profile"])) * 100
+      print "\tTotal", sum(self.locctr.values())
       print
-      print "Providers:"
-      for key, val in self.pctr.items():
-         print "\t", key, val, (val / float(self.dtctr['menu'])) * 100
-      print "\t", "Total", sum(self.pctr.values())
+      print "Menu Attributions by Locations:"
+      providers= {}
+      for location, pctr in self.pctr.items():
+         for provider, val in pctr.items():
+            try: 
+               providers[provider]+= val
+            except KeyError:
+               providers[provider]= val
+
+            print "\t", location, provider, val, (val / float(sum(pctr.values())) * 100)
+         print "\tTotal", sum(pctr.values()),  (sum(pctr.values()) /  float(sum([sum(pctr.values()) for pctr in self.pctr.values()]))) * 100
+         print
       print
-       
+      print "Total Menu Attributions :"
+      for provider, val in providers.items():
+         print "\t", provider, val, (val / float(sum(providers.values()))) * 100
+      print "\tTotal", sum(providers.values())
+
 
       print "All Complete!", self.id
 
