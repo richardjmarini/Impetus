@@ -3,6 +3,13 @@
 ##Auto-Scaling Asynchronous Distributed Processing Framework
 impetus is an auto-scaling asynchronous distributed processing framework originally designed for the purpose of building a distributed crawler with machine learning analytics.  The Impetus Framework is the auto-scaling asynchronous distributed processing sub-system of that distributed crawler.  This is the second version of the sub-system.  The original version still exists here: https://github.com/richardjmarini/Impetus1.git
 
+
+#####Usage Examples
+*See Yelp Crawler and Market Position for example of a simple crawler and document analyser using the Impetus system:*
+
+https://github.com/singleplatform/Impetus/tree/master/examples
+
+
 ###Queue
 
 impetus.Queue is a centralized context manager for the Impetus Framework.  Client applications connect to the queue via the API which consists of a series of remote methods that allow the client to create processing streams. An application can create one or more streams.  Each stream has a unique identifier.  If an identifier is not provided by the client a unique identifier is created. The same stream can be used by one or more applications.  Each stream can be assigned various meta-data properties that describe the stream.  These meta-data properties are used by DFS (the dynamic frequency scaler) to assist in intelligent auto-scaling. A stream contains both a Priority Queue and a Key-Val data store. 
