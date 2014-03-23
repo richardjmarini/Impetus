@@ -961,7 +961,8 @@ class DFS(Daemon):
    """
 
    billing_period= 3000
-   idle_time= billing_period / 10
+   shutdown_period= billing_period= 600
+   idle_time= 300
    seconds_per_day= 86400
 
    def __init__(self, address, authkey, queue, qauthkey, mnon, mpps, ec2= None, bootstrap= None, deploykey= None, logdir= curdir, piddir= curdir):
@@ -1188,7 +1189,7 @@ class DFS(Daemon):
             node.update([("starttime", starttime), ("uptime", uptime), ("idletime", idletime)])
 
             # calculate our flags
-            end_of_billing_period= (uptime.days * self.seconds_per_day) + uptime.seconds >= self.billing_period
+            end_of_billing_period= (((uptime.days * self.seconds_per_day) + uptime.seconds) % self.billing_period) > self.shutdown_period
             idle= (idletime.days * self.seconds_per_day) + idletime.seconds >= self.idle_time
 
             print "Node:",  node, idle, end_of_billing_period
