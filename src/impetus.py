@@ -338,6 +338,7 @@ class Impetus(object):
 
       self.address= address
       self.taskdir= path.join(taskdir, self.id)
+      self.properties= properties
 
       self.impq= SyncManager(address= self.address, authkey= authkey)
       self.impq.register("get_streams")
@@ -476,6 +477,16 @@ class Impetus(object):
       is initialized to the starting state and placed the the streams priorty queue 
       for execution. 
       """
+ 
+      if self.properties.get('mss'):
+
+         stall_time= 1
+         while len(self.store) > int(self.properties.get('mss')):
+            print "throttling size %s exceeds mss %s" % (len(self.store), self.properties.get('mss'))
+            sleep(stall_time)  
+            stall_time+= 1
+            if stall_time >= 10:
+               break
 
       current_thread= currentThread()
       job= Job(
@@ -602,7 +613,7 @@ class Worker(Process):
 
    statuses= ("idle", "busy")
 
-   def __init__(self, id, stream_id, queue, store, properties):
+   def __init__(self, id, stream_id, queue, store, properties, shutdown):
 
       super(Worker, self).__init__()
 
@@ -612,7 +623,7 @@ class Worker(Process):
       self.queue= queue
       self.store= store
       self.properties= properties
-
+      self.shutdown= shutdown
 
    def process(self):
       """
@@ -668,6 +679,12 @@ class Worker(Process):
 
          job.update([("result", result), ("status", "error")])
          self.store.update([(job.get("id"), job)])
+
+         # if we've been blocked then signal to Node to shutdown
+         if "HTTP Error 403: Forbidden" in result.get("error", ""):
+            print >> stderr, "worker blocked", self.pid
+            self.shutdown.value= True
+            self.alive= False
   
       if sig:
          sig= signal(SIGINT, sig)
@@ -719,6 +736,7 @@ class Node(Daemon):
       self.dfs= dfs
       self.dauthkey= dauthkey
       self.properties= properties
+      self.shutdown= Value('i', 0)
 
       self.workers= {}
       self.alive= True
@@ -876,7 +894,7 @@ class Node(Daemon):
             if num_stream_workers:
                print "creating %s workers for %s" % (num_stream_workers, stream_id)
             for i in range(1, num_stream_workers + 1):
-               worker= Worker(self.id, stream_id, queue, store, properties)
+               worker= Worker(self.id, stream_id, queue, store, properties, self.shutdown)
                worker.start()
                self.workers.update([(worker.pid, worker)])
                idle_time= datetime.utcnow()
@@ -896,7 +914,13 @@ class Node(Daemon):
 
          if hasattr(self, 'impd'):
             nodes.update([(self.id, status)])
-            print nodes, type(nodes)
+
+         # if a worker has been blocked then stop all workers and shutdown
+         # this will then cause the Node to go idle and DFS will shut it down
+         # and restart a new node to take it's place
+         if self.shutdown.value:
+            print >> stderr, "node blocked", self.id
+            self.alive= False
 
          sleep(1)
 
@@ -960,8 +984,8 @@ class DFS(Daemon):
    when the end of the billing cycle is reached.  
    """
 
-   billing_period= 3000
-   shutdown_period= billing_period= 600
+   billing_period= 3600
+   shutdown_period= billing_period - 600
    idle_time= 300
    seconds_per_day= 86400
 
